@@ -20,8 +20,8 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Phase     | Name                                   | Items  | Completed | Progress |
 | :-------- | :------------------------------------- | :----- | :-------- | :------- |
-| 0         | Setup & Infrastructure                 | 6      | 0         | 0%       |
-| 1         | Core: Index Accounting & Storage       | 8      | 0         | 0%       |
+| 0         | Setup & Infrastructure                 | 6      | 6         | 100%     |
+| 1         | Core: Index Accounting & Storage       | 8      | 8         | 100%     |
 | 2         | Interest Rate Model                    | 6      | 0         | 0%       |
 | 3         | Supply & Withdraw                      | 8      | 0         | 0%       |
 | 4         | Borrow & Repay                         | 7      | 0         | 0%       |
@@ -30,7 +30,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 7         | Reserves & Protocol Management         | 6      | 0         | 0%       |
 | 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 0         | 0%       |
 | 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **0**     | **0%**   |
+| **TOTAL** |                                        | **76** | **14**    | **18%**  |
 
 ---
 
@@ -38,12 +38,15 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 > **Objective:** Configure the development environment and base project structure.
 
-- [ ] **0.1** Initialize Foundry project (Solidity 0.8.26)
-- [ ] **0.2** Configure dependencies (OpenZeppelin v5, Solady, Pyth SDK)
-- [ ] **0.3** Folder structure (`src/`, `src/interfaces/`, `test/unit/`, `test/fuzz/`, `test/invariant/`, `test/integration/`, `test/fork/`, `script/`)
-- [ ] **0.4** Configure CI/CD (GitHub Actions: build, test, coverage)
-- [ ] **0.5** Setup linters (Solhint, Prettier)
-- [ ] **0.6** Repository documentation (README, LICENSE)
+- [x] **0.1** Initialize Foundry project (Solidity 0.8.26)
+- [x] **0.2** Configure dependencies (OpenZeppelin v5, Solady, Pyth SDK)
+- [x] **0.3** Folder structure (`src/`, `src/interfaces/`, `test/unit/`, `test/fuzz/`, `test/invariant/`, `test/integration/`, `test/fork/`, `script/`)
+- [x] **0.4** Configure CI/CD (GitHub Actions: build, test, coverage)
+- [x] **0.5** Setup linters (Solhint, Prettier)
+- [x] **0.6** Repository documentation (README, LICENSE)
+
+> **0.2 note:** OpenZeppelin v5.1.0 and Solady v0.1.26 are installed. The Pyth Solidity SDK is
+> deliberately deferred to Phase 5, where the oracle is built; nothing before that phase imports it.
 
 **Deliverables:**
 
@@ -58,14 +61,25 @@ Each phase should be completed before moving to the next. Within each phase, the
 >
 > **Dependencies:** Phase 0
 
-- [ ] **1.1** Interface `ILendingMarket` + custom error catalogue
-- [ ] **1.2** Storage layout: `MarketState`, `UserBasic` (signed `int104` principal + `assetsIn` bitmap), `CollateralConfig`, packed as documented
-- [ ] **1.3** Conversion pair `presentValue()` / `principalValue()` with directed rounding (supply rounds down, borrow rounds up)
-- [ ] **1.4** `accrue()`: supply/borrow index advancement over elapsed time (rates injected via `IInterestRateModel`, mockable)
-- [ ] **1.5** `getUtilization()`: handles `totalSupply == 0` and the `U > 1` edge
-- [ ] **1.6** Rebasing ERC20 views: `balanceOf`, `borrowBalanceOf`, `totalSupply`, `totalBorrow`
-- [ ] **1.7** `getReserves()`: derived `int256` reserves (`cash + totalBorrow - totalSupply`)
-- [ ] **1.8** Unit + fuzz tests: conversion round trips never favor the user, index monotonicity, accrual over arbitrary time gaps
+- [x] **1.1** Interface `ILendingMarket` + custom error catalogue
+- [x] **1.2** Storage layout: `MarketState`, `UserBasic` (signed `int104` principal + `assetsIn` bitmap), `CollateralConfig`, packed as documented
+- [x] **1.3** Conversion pair `presentValue()` / `principalValue()` with directed rounding (supply rounds down, borrow rounds up)
+- [x] **1.4** `accrue()`: supply/borrow index advancement over elapsed time (rates injected via `IInterestRateModel`, mockable)
+- [x] **1.5** `getUtilization()`: handles `totalSupply == 0` and the `U > 1` edge
+- [x] **1.6** Rebasing ERC20 views: `balanceOf`, `borrowBalanceOf`, `totalSupply`, `totalBorrow`
+- [x] **1.7** `getReserves()`: derived `int256` reserves (`cash + totalBorrow - totalSupply`)
+- [x] **1.8** Unit + fuzz tests: conversion round trips never favor the user, index monotonicity, accrual over arbitrary time gaps
+
+> **1.6 note:** the rebasing balance views are implemented here. The full ERC20 surface
+> (`transfer`, `approve`, `Transfer` event mirroring) belongs to Phase 3, item 3.5.
+>
+> **Single accounting path:** `updateBasePrincipal()` is built in this phase, ahead of any caller,
+> so every later phase routes through it (Guide 3, Section 7.4).
+>
+> **Mutation checks:** all seven rounding sites (both `presentValue` directions, both
+> `principalValue` directions, both index accruals, and utilization) were verified by flipping each
+> direction and confirming the suite fails. Round-trip assertions alone did not catch a flipped
+> `presentValueSupply`, so per-site exact-value fuzz assertions were added.
 
 **Deliverables:**
 
@@ -269,6 +283,12 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-20 | Internal functions prefixed with `_` (`accrueInternal` folded into `_accrue`); documented the `rate * elapsed` product in `_accrue` as the one multiplication outside `fullMulDiv`'s 512-bit intermediate, with its overflow bound and why it stays checked; added `test/unit/AccrualOverflow.t.sol` (3 tests) pinning the revert at the boundary |
+| 2026-07-20 | Conversion primitives (`presentValue*`, `principalValue*`, both unsigned and signed) moved from `public` to `internal`: none of them is part of `ILendingMarket`, so they were exposed only because tests called them. `LendingMarketHarness` now wraps them as `exposed*`, shrinking the deployed public surface from 15 methods to 9 |
+| 2026-07-20 | `LendingMarket` now derives `BASE_SCALE` from `IERC20Metadata(baseToken).decimals()` instead of taking `baseDecimals` as a constructor argument: a mismatched literal would corrupt every base-denominated quantity silently rather than reverting, and validating the argument would fail on a token without `decimals()` exactly as reading it does |
+| 2026-07-20 | Documented and pinned the `1e15` index scale choice against a RAY (Aave style) alternative in [05-implementation.md](./05-implementation.md#2-core-data-structures): the extra digits carry no signal at a 6-decimal base, the residual is bounded at one base unit in the protocol-favorable direction, and the analysis is coupled to the base having 6 decimals. Added `test/fuzz/IndexPrecision.t.sol` (4 tests) as the executable justification |
+| 2026-07-20 | Phase 1 complete: `ILendingMarket` with the full error catalogue, `IInterestRateModel`, `IPriceOracle`; storage layout and packing per Guide 3 Section 3; the directed-rounding conversion pair; `accrue()`; utilization including the `U > 1` edge; rebasing balance views; derived `getReserves()`; and the single accounting path `updateBasePrincipal()`. 53 tests green (34 unit, 19 fuzz at 1000 runs), all seven rounding sites mutation-verified |
+| 2026-07-20 | Phase 0 complete: Foundry project on Solidity 0.8.26, OpenZeppelin v5.1.0 + Solady v0.1.26 as pinned submodules (Pyth SDK deferred to Phase 5), documented folder structure, Solhint + Prettier + `forge fmt`, and a GitHub Actions pipeline running build, test, lint, and coverage |
 | 2026-07-20 | Restored mainnet fork testing, scoped to the real external dependencies (Pyth, Chainlink, real USDC/WETH/wBTC); the lending logic is original and stays covered by unit, fuzz, and invariant tests |
 | 2026-07-20 | Removed mainnet fork testing (the PoC is never deployed against live infrastructure); replaced by end-to-end integration tests on a local mocked oracle stack |
 | 2026-07-20 | Initial roadmap version |

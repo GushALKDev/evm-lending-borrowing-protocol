@@ -86,6 +86,23 @@ Bounds justification:
 - `uint64` indexes at `1e15`: overflow at 18,446x growth; at a permanent 100% APR that is over 14 years of compounding, far beyond a PoC market's life, and the overflow reverts rather than corrupting.
 - `uint40 lastAccrualTime`: overflows in the year 36812.
 
+### Why `1e15` and not WAD or RAY for the index scale
+
+Aave carries its `liquidityIndex` and `variableBorrowIndex` as `uint128` at RAY (`1e27`). This design uses `uint64` at `1e15` instead, and the reasoning is worth stating because "more precision is better" is the obvious intuition and it does not hold here.
+
+**The scale is bounded by the type, and the type is bounded by the slot.** `type(uint64).max ≈ 1.845e19`, so a `1e15` seed allows 18,446x of index growth while a `1e18` seed would allow only 18.4x, which is reachable. Widening to `uint128` would remove that constraint, but it breaks the `MarketState` packing: two `uint128` indexes fill an entire slot on their own, pushing `lastAccrualTime` and `pauseFlags` into a second one. Since `accrue()` writes all three fields and runs at the top of every mutating function, that converts one `SSTORE` into two on the hottest path in the protocol.
+
+**The extra digits carry no signal at a 6 decimal base.** Two independent quantizations sit below the index:
+
+1. The per-second rate is itself quantized at `1e18`. At 4% APR, `rate ≈ 1.268e9`, roughly 9 significant digits. An index with 15 digits of scale already has more resolution than the rate can supply.
+2. `presentValue` then quantizes the result to base units (`1e6`). At 6 decimals this is far coarser than either.
+
+Measured against a RAY reference over a one-year accrual, the `1e15` index reproduces it digit for digit (`1039999999988944` vs `1039999999988944e12`). The residual in present value is **at most one base unit (`1e-6` USDC), always in the protocol-favorable direction**, at any position size. Aave needs RAY because its scaled balances represent 18-decimal tokens, where 12 more orders of resolution do exist below the index; here they do not.
+
+> ⚠️ **This analysis is coupled to the base asset having 6 decimals.** An 18-decimal base (the WETH-base market in [ROADMAP Phase 9.6](./ROADMAP.md#phase-9-future-work-post-poc)) would have 12 more orders of resolution to preserve and would need a wider index scale, and therefore a wider type and a different packing. Revisit this decision before deploying any market whose base is not a 6-decimal asset.
+
+The claims above are executable, not prose: `test/fuzz/IndexPrecision.t.sol` asserts the direction and the one-base-unit bound against a RAY reference under fuzzing, and pins `BASE_SCALE == 1e6` so a widened base fails the suite loudly.
+
 Pause flag bits:
 
 ```solidity
