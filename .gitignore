@@ -2,7 +2,7 @@
 out/
 cache/
 broadcast/
-lib/
+# lib/ is intentionally tracked: dependencies are git submodules pinned in .gitmodules
 
 # Environment
 .env
@@ -11,6 +11,9 @@ lib/
 # Coverage
 lcov.info
 coverage/
+
+# Node (lint toolchain only)
+node_modules/
 
 # OS
 .DS_Store

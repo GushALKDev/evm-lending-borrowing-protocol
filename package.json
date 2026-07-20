@@ -1,0 +1,17 @@
+{
+  "name": "lending-borrowing-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EVM lending / borrowing protocol (PoC): linting toolchain only, contracts are built with Foundry",
+  "license": "MIT",
+  "scripts": {
+    "lint": "solhint 'src/**/*.sol' 'test/**/*.sol' 'script/**/*.sol'",
+    "format": "prettier --write 'src/**/*.sol' 'test/**/*.sol' 'script/**/*.sol'",
+    "format:check": "prettier --check 'src/**/*.sol' 'test/**/*.sol' 'script/**/*.sol'"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "prettier-plugin-solidity": "^1.4.1",
+    "solhint": "^5.0.3"
+  }
+}
