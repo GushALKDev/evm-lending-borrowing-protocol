@@ -122,7 +122,9 @@ INV-13 (absorb coverage condition, Guide 2 Section 8):
 
 ```
 INV-14: getSupplyRate(U) <= getBorrowRate(U) for all U in [0, 1e18];
-        both monotone non-decreasing in U; continuous at the kink
+        both monotone non-decreasing in U; continuous at the kink;
+        both return for every utilization the market can produce (bounded to
+        ~[0, 1e18] by the accounting), the unclamped kinked curve as in Aave
 ```
 
 ---
@@ -284,7 +286,7 @@ Four layers, mapping directly to [ROADMAP Phase 8](./ROADMAP.md#phase-8-invarian
 | Target                                | Property fuzzed                                                            |
 | :------------------------------------- | :---------------------------------------------------------------------------- |
 | `presentValue`/`principalValue`       | Round trips never favor the account (INV-3), across full index/principal domain |
-| `getBorrowRate`/`getSupplyRate`       | INV-14: monotone, continuous at kink, supply <= borrow, total on `uint256`    |
+| `getBorrowRate`/`getSupplyRate`       | INV-14: monotone, continuous at kink, supply <= borrow on `[0, 1e18]`, return for every reachable utilization (overflow only at a U ~1e33x full utilization, unconstructible) |
 | Accrual                               | Index monotonicity over arbitrary `dt`; reserve delta >= RF share            |
 | Health checks                         | Band-edge monotonicity: raising `conf` never improves capacity, never blocks absorb eligibility |
 | Absorb settlement                     | `newBalance` reconstruction exact in all three cases; INV-1 preserved         |

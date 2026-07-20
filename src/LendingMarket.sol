@@ -247,12 +247,12 @@ abstract contract LendingMarket is ILendingMarket {
         uint64 borrowIndex = marketState.baseBorrowIndex;
 
         // `rate * elapsed` is computed in plain uint256, outside fullMulDiv's 512 bit intermediate,
-        // so it is the one product here not covered by that helper. It is left checked rather than
-        // unchecked on purpose: IInterestRateModel is total over uint256 (Guide 5, Section 3.2), so
-        // the market cannot assume the rate is small, and only the rate model's own bounds keep the
-        // product in range. Overflow would need `rate > type(uint256).max / elapsed`, roughly 3.6e69
-        // over a one year window, against ~3.2e11 for a 1000% APR. If a pathological model ever
-        // exceeded it, checked arithmetic reverts and the index stays intact rather than wrapping.
+        // so it is the one product here not covered by that helper, and the single documented
+        // residual revert of accrue() over the reachable domain (Guide 5, Section 3.2). It is left
+        // checked rather than unchecked on purpose: it is a corruption guard, not a liveness path.
+        // Overflow would need `rate > type(uint256).max / elapsed`, roughly 3.6e69 over a one year
+        // window, against ~3.2e11 for a 1000% APR. If a pathological model ever exceeded it, checked
+        // arithmetic reverts and the index stays intact rather than wrapping.
         marketState.baseSupplyIndex =
             (supplyIndex + FixedPointMathLib.fullMulDiv(supplyIndex, supplyRate * elapsed, RATE_SCALE)).toUint64();
         marketState.baseBorrowIndex =

@@ -22,7 +22,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 | :-------- | :------------------------------------- | :----- | :-------- | :------- |
 | 0         | Setup & Infrastructure                 | 6      | 6         | 100%     |
 | 1         | Core: Index Accounting & Storage       | 8      | 8         | 100%     |
-| 2         | Interest Rate Model                    | 6      | 0         | 0%       |
+| 2         | Interest Rate Model                    | 6      | 6         | 100%     |
 | 3         | Supply & Withdraw                      | 8      | 0         | 0%       |
 | 4         | Borrow & Repay                         | 7      | 0         | 0%       |
 | 5         | Oracle (Pyth + Chainlink)              | 10     | 0         | 0%       |
@@ -30,7 +30,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 7         | Reserves & Protocol Management         | 6      | 0         | 0%       |
 | 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 0         | 0%       |
 | 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **14**    | **18%**  |
+| **TOTAL** |                                        | **76** | **20**    | **26%**  |
 
 ---
 
@@ -96,12 +96,29 @@ Each phase should be completed before moving to the next. Within each phase, the
 >
 > **Dependencies:** Phase 0 (parallel to Phase 1)
 
-- [ ] **2.1** Interface `IInterestRateModel`
-- [ ] **2.2** Contract `InterestRateModel.sol` with immutable parameters (`baseRate`, `slopeLow`, `slopeHigh`, `kink`, `reserveFactor`) and constructor sanity checks
-- [ ] **2.3** `getBorrowRate(utilization)`: kinked curve, per-second rates at 1e18 scale
-- [ ] **2.4** `getSupplyRate(utilization)`: `borrowRate * U * (1 - reserveFactor)`
-- [ ] **2.5** Wire the model into `LendingMarket.accrue()` (immutable address)
-- [ ] **2.6** Tests: continuity at the kink, monotonicity fuzz, `supplyRate <= borrowRate` for all U, rate identity (borrow interest == supply interest + reserve cut) fuzz
+- [x] **2.1** Interface `IInterestRateModel`
+- [x] **2.2** Contract `InterestRateModel.sol` with immutable parameters (`baseRate`, `slopeLow`, `slopeHigh`, `kink`, `reserveFactor`) and constructor sanity checks
+- [x] **2.3** `getBorrowRate(utilization)`: kinked curve, per-second rates at 1e18 scale
+- [x] **2.4** `getSupplyRate(utilization)`: `borrowRate * U * (1 - reserveFactor)`
+- [x] **2.5** Wire the model into `LendingMarket.accrue()` (immutable address)
+- [x] **2.6** Tests: continuity at the kink, monotonicity fuzz, `supplyRate <= borrowRate` for all U, rate identity (borrow interest == supply interest + reserve cut) fuzz
+
+> **2.1 note:** the interface was written in Phase 1 alongside the other interfaces; verified here
+> against the real curve.
+>
+> **2.6 note:** the "rate identity" is implemented as the **directional inequality** of
+> [02-mathematics.md Section 6](./02-mathematics.md#6-interest-split-and-reserve-growth), not an exact
+> equality: the two rates floor independently, so the residual accrues to reserves and no integer
+> identity exists. Asserting equality would fail by construction.
+>
+> **No clamp on utilization:** the rate functions are the pure kinked curve, unclamped, as in Aave.
+> Utilization is derived (`totalBorrowPV * 1e18 / totalSupplyPV`) and the accounting bounds it to
+> `~[0, 1e18]`, while the `fullMulDiv` overflow sits at a `U ~1.9e33` times full utilization: a state
+> the invariants forbid, so a clamp would be a magic number defending the unreachable. The liveness
+> guarantee is refocused where it belongs: `accrue()` does not revert for any reachable state, and
+> its one documented out-of-domain residual is the checked `rate * elapsed` index product, not the
+> rate lookup. Documented in
+> [05-implementation.md Section 3.2](./05-implementation.md#3-interfaces-and-function-contracts).
 
 **Deliverables:**
 
@@ -283,6 +300,8 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-21 | Corrected an inaccurate totality claim in the rate model: Guide 5 Section 3.2 previously promised the rate functions were total over all `uint256`, which was both false (`fullMulDiv` overflows far out) and unnecessary. Utilization is bounded by the accounting to `~[0, 1e18]`, so no reachable state approaches overflow. Removed the earlier saturation clamp (`U_MAX_SANE`): no clamp is added, matching Aave. Refocused the liveness guarantee on the one reachable revert, the checked `rate * elapsed` index product in `accrue()`, and reworded INV-14 accordingly. Documentation and test correctness fix, no change to reachable behavior |
+| 2026-07-20 | Phase 2 complete: `InterestRateModel` with the immutable kinked curve, the derived floored supply rate, and constructor sanity checks enforcing INV-12; wired into the market's accrual and verified against the real curve at the kink and in the jump regime. 30 tests (18 unit, 6 fuzz, 4 market-accrual), the supply-rate floor mutation-verified |
 | 2026-07-20 | Internal functions prefixed with `_` (`accrueInternal` folded into `_accrue`); documented the `rate * elapsed` product in `_accrue` as the one multiplication outside `fullMulDiv`'s 512-bit intermediate, with its overflow bound and why it stays checked; added `test/unit/AccrualOverflow.t.sol` (3 tests) pinning the revert at the boundary |
 | 2026-07-20 | Conversion primitives (`presentValue*`, `principalValue*`, both unsigned and signed) moved from `public` to `internal`: none of them is part of `ILendingMarket`, so they were exposed only because tests called them. `LendingMarketHarness` now wraps them as `exposed*`, shrinking the deployed public surface from 15 methods to 9 |
 | 2026-07-20 | `LendingMarket` now derives `BASE_SCALE` from `IERC20Metadata(baseToken).decimals()` instead of taking `baseDecimals` as a constructor argument: a mismatched literal would corrupt every base-denominated quantity silently rather than reverting, and validating the argument would fail on a token without `decimals()` exactly as reading it does |

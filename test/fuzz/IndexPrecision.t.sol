@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+// solhint-disable no-console
+// This suite includes a reporting test that deliberately logs the measured precision gap; the
+// console output is the point of test_indexScale_reportErrorAcrossPositionSizes.
+
 import {Test} from "forge-std/Test.sol";
 import {console2} from "forge-std/console2.sol";
 
