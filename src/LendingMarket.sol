@@ -791,11 +791,20 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     //////////////////////////////////////////////////////////////*/
 
     /**
+     * @notice Accepts ETH so the oracle can refund its per-asset fee surplus back to the market.
+     * @dev _pushPrices forwards the whole balance to the oracle on each per-asset call; the oracle
+     *      consumes only the Pyth fee and refunds the rest here. The market re-forwards that balance
+     *      on the next call and _refundExcessValue sweeps the final remainder to the caller, so the
+     *      market never retains ETH across a transaction.
+     */
+    receive() external payable {}
+
+    /**
      * @notice Sweeps any leftover msg.value back to the caller so the market never holds ETH.
-     * @dev Sweeping the whole balance rather than `msg.value - spent` is deliberate. ETH can only
-     *      reach this contract through a forced selfdestruct or a pre-deploy transfer, and sweeping
-     *      lets the next caller recover it. An exact refund would strand it instead, requiring an
-     *      owner-only rescue function: more governance surface for no user benefit.
+     * @dev Sweeping the whole balance rather than `msg.value - spent` is deliberate. Any ETH that
+     *      reaches this contract, whether the oracle's refund, a forced selfdestruct, or a pre-deploy
+     *      transfer, is swept to the caller. An exact refund would strand the latter two instead,
+     *      requiring an owner-only rescue function: more governance surface for no user benefit.
      */
     function _refundExcessValue() internal {
         uint256 balance = address(this).balance;
