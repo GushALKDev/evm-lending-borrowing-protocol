@@ -2,16 +2,23 @@
 pragma solidity 0.8.26;
 
 import {LendingMarket} from "../../src/LendingMarket.sol";
+import {ILendingMarket} from "../../src/interfaces/ILendingMarket.sol";
 
 /**
  * @title LendingMarketHarness
- * @notice Exposes the internal accounting path so Phase 1 can test it before user actions exist.
- * @dev Test only. The production market routes these through supply / withdraw / absorb instead.
+ * @notice Concrete deployable market exposing internals for tests, plus stubs for the surface that
+ *         later phases fill in.
+ * @dev Test only. Phase 4 to 7 replace the reverting stubs (absorb, buyCollateral, the health and
+ *      quote views, withdrawReserves) with real implementations in the production contract.
  */
 contract LendingMarketHarness is LendingMarket {
     error NotImplemented();
 
-    constructor(address baseToken, address interestRateModel) LendingMarket(baseToken, interestRateModel) {}
+    constructor(MarketConfig memory cfg, CollateralConfig[] memory collaterals) LendingMarket(cfg, collaterals) {}
+
+    /*//////////////////////////////////////////////////////////////
+                        EXPOSED INTERNALS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Drives the single accounting path directly.
     function exposedUpdateBasePrincipal(address account, int104 oldPrincipal, int104 newPrincipal) external {
@@ -39,6 +46,11 @@ contract LendingMarketHarness is LendingMarket {
         return (marketState.totalSupplyBase, marketState.totalBorrowBase);
     }
 
+    /// @notice The account's collateral membership bitmap.
+    function getAssetsIn(address account) external view returns (uint16) {
+        return userBasic[account].assetsIn;
+    }
+
     /*//////////////////////////////////////////////////////////////
                         CONVERSION PRIMITIVES
     //////////////////////////////////////////////////////////////*/
@@ -47,32 +59,26 @@ contract LendingMarketHarness is LendingMarket {
     // ILendingMarket. These wrappers exist so the rounding direction of each site stays directly
     // assertable without widening the deployed ABI.
 
-    /// @notice Present value of a positive base principal, rounds down.
     function exposedPresentValueSupply(uint104 principal) external view returns (uint256) {
         return _presentValueSupply(principal);
     }
 
-    /// @notice Present value magnitude of a debt principal, rounds up.
     function exposedPresentValueBorrow(uint104 principal) external view returns (uint256) {
         return _presentValueBorrow(principal);
     }
 
-    /// @notice Supply principal for a present value, rounds down.
     function exposedPrincipalValueSupply(uint256 present) external view returns (uint104) {
         return _principalValueSupply(present);
     }
 
-    /// @notice Debt principal magnitude for a debt present value, rounds up.
     function exposedPrincipalValueBorrow(uint256 present) external view returns (uint104) {
         return _principalValueBorrow(present);
     }
 
-    /// @notice Signed present value of a signed principal.
     function exposedPresentValue(int104 principal) external view returns (int256) {
         return _presentValue(principal);
     }
 
-    /// @notice Signed principal for a signed present value.
     function exposedPrincipalValue(int256 present) external view returns (int104) {
         return _principalValue(present);
     }
@@ -81,16 +87,7 @@ contract LendingMarketHarness is LendingMarket {
                         NOT YET IMPLEMENTED
     //////////////////////////////////////////////////////////////*/
 
-    // The user facing surface lands in Phases 3 to 7. These stubs exist only so the Phase 1
-    // accounting core is deployable and testable against the full ILendingMarket type.
-
-    function supply(address, uint256) external pure {
-        revert NotImplemented();
-    }
-
-    function withdraw(address, uint256, bytes[] calldata) external payable {
-        revert NotImplemented();
-    }
+    // Filled in by Phases 4 to 7. Kept as reverting stubs so the market is deployable meanwhile.
 
     function absorb(address, bytes[] calldata) external payable {
         revert NotImplemented();
@@ -104,10 +101,6 @@ contract LendingMarketHarness is LendingMarket {
         revert NotImplemented();
     }
 
-    function setPauseFlags(uint8) external pure {
-        revert NotImplemented();
-    }
-
     function isBorrowCollateralized(address) external pure returns (bool) {
         revert NotImplemented();
     }
@@ -117,10 +110,6 @@ contract LendingMarketHarness is LendingMarket {
     }
 
     function quoteCollateral(address, uint256) external pure returns (uint256) {
-        revert NotImplemented();
-    }
-
-    function userCollateral(address, address) external pure returns (uint128) {
         revert NotImplemented();
     }
 }

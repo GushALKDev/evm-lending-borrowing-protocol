@@ -23,14 +23,14 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 0         | Setup & Infrastructure                 | 6      | 6         | 100%     |
 | 1         | Core: Index Accounting & Storage       | 8      | 8         | 100%     |
 | 2         | Interest Rate Model                    | 6      | 6         | 100%     |
-| 3         | Supply & Withdraw                      | 8      | 0         | 0%       |
+| 3         | Supply & Withdraw                      | 8      | 8         | 100%     |
 | 4         | Borrow & Repay                         | 7      | 0         | 0%       |
 | 5         | Oracle (Pyth + Chainlink)              | 10     | 0         | 0%       |
 | 6         | Absorb Liquidation                     | 8      | 0         | 0%       |
 | 7         | Reserves & Protocol Management         | 6      | 0         | 0%       |
 | 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 0         | 0%       |
 | 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **20**    | **26%**  |
+| **TOTAL** |                                        | **76** | **28**    | **37%**  |
 
 ---
 
@@ -135,14 +135,29 @@ Each phase should be completed before moving to the next. Within each phase, the
 >
 > **Dependencies:** Phases 1, 2
 
-- [ ] **3.1** `supply(base)`: positive-principal path (transferFrom, principal credit through the single accounting path)
-- [ ] **3.2** `supply(collateral)`: supply cap check, `assetsIn` bitmap update
-- [ ] **3.3** `withdraw(base)`: positive-to-zero path (no borrow), cash sufficiency check
-- [ ] **3.4** `withdraw(collateral)`: balance decrement, bitmap clearing, health check hook (no-op while debt is impossible)
-- [ ] **3.5** ERC20 `transfer`/`transferFrom` of base restricted so the sender's principal never goes negative (no oracle needed)
-- [ ] **3.6** Pause flags (`SUPPLY`, `TRANSFER`, `WITHDRAW`) + pause guardian role
-- [ ] **3.7** Events: `Supply`, `Withdraw`, `SupplyCollateral`, `WithdrawCollateral`, ERC20 `Transfer` mirroring supply-side moves
-- [ ] **3.8** Unit tests (coverage >95% on the paths above)
+- [x] **3.1** `supply(base)`: positive-principal path (transferFrom, principal credit through the single accounting path)
+- [x] **3.2** `supply(collateral)`: supply cap check, `assetsIn` bitmap update
+- [x] **3.3** `withdraw(base)`: positive-to-zero path (no borrow), cash sufficiency check
+- [x] **3.4** `withdraw(collateral)`: balance decrement, bitmap clearing, health check hook (no-op while debt is impossible)
+- [x] **3.5** ERC20 `transfer`/`transferFrom` of base restricted so the sender's principal never goes negative (no oracle needed)
+- [x] **3.6** Pause flags (`SUPPLY`, `TRANSFER`, `WITHDRAW`) + pause guardian role
+- [x] **3.7** Events: `Supply`, `Withdraw`, `SupplyCollateral`, `WithdrawCollateral`, ERC20 `Transfer` mirroring supply-side moves
+- [x] **3.8** Unit tests (coverage >95% on the paths above)
+
+> **Constructor change:** the market now takes a `MarketConfig` bundle plus a `CollateralConfig[]`,
+> wiring the oracle, owner (`Ownable2Step`), guardian, `minBorrow`, and `targetReserves`, and listing
+> collateral assets into the `assetsIn` bit-offset order. Per-asset INV-12 ordering, decimals, and
+> supplyCap are enforced here; the absorb coverage condition (INV-13) is deferred to Phase 7, where
+> the oracle supplies `MAX_CONFIDENCE_BPS`.
+>
+> **Health hook:** `withdraw(collateral)` calls `_requireBorrowCollateralized` only when the account
+> has debt. In Phase 3 debt cannot exist, so the hook reverts `NotImplementedYet` and is never
+> reached; Phase 4 replaces it with the real capacity math. This is why 4 lines of the borrow/repay
+> path are the only uncovered lines in the market (97.84% line coverage, above the 95% target).
+>
+> **ERC20:** the full base surface (`transfer`, `transferFrom`, `approve`, `allowance`, metadata) is
+> implemented, with the `Transfer` log mirroring supply-side principal moves (mint on increase, burn
+> on decrease). `transfer` cannot push the sender negative, so it needs no oracle.
 
 **Deliverables:**
 
@@ -300,6 +315,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-21 | Phase 3 complete: base and collateral supply/withdraw, the full rebasing ERC20 base surface, and the SUPPLY/TRANSFER/WITHDRAW pause flags with the guardian-adds/owner-clears rule (`Ownable2Step` owner). The constructor now takes a `MarketConfig` bundle plus `CollateralConfig[]`, enforcing INV-12 ordering, decimals, and supply caps per asset; INV-13 deferred to Phase 7. All token-moving paths accrue first, follow CEI, and carry a `nonReentrant` guard. 36 new tests, 97.84% line coverage on the market (the 4 uncovered lines are the Phase 4 borrow/repay hook); 126 total green |
 | 2026-07-21 | Corrected an inaccurate totality claim in the rate model: Guide 5 Section 3.2 previously promised the rate functions were total over all `uint256`, which was both false (`fullMulDiv` overflows far out) and unnecessary. Utilization is bounded by the accounting to `~[0, 1e18]`, so no reachable state approaches overflow. Removed the earlier saturation clamp (`U_MAX_SANE`): no clamp is added, matching Aave. Refocused the liveness guarantee on the one reachable revert, the checked `rate * elapsed` index product in `accrue()`, and reworded INV-14 accordingly. Documentation and test correctness fix, no change to reachable behavior |
 | 2026-07-20 | Phase 2 complete: `InterestRateModel` with the immutable kinked curve, the derived floored supply rate, and constructor sanity checks enforcing INV-12; wired into the market's accrual and verified against the real curve at the kink and in the jump regime. 30 tests (18 unit, 6 fuzz, 4 market-accrual), the supply-rate floor mutation-verified |
 | 2026-07-20 | Internal functions prefixed with `_` (`accrueInternal` folded into `_accrue`); documented the `rate * elapsed` product in `_accrue` as the one multiplication outside `fullMulDiv`'s 512-bit intermediate, with its overflow bound and why it stays checked; added `test/unit/AccrualOverflow.t.sol` (3 tests) pinning the revert at the boundary |

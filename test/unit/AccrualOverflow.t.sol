@@ -3,7 +3,11 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
+import {LendingMarket} from "../../src/LendingMarket.sol";
+import {ILendingMarket} from "../../src/interfaces/ILendingMarket.sol";
 import {LendingMarketHarness} from "../mocks/LendingMarketHarness.sol";
+import {MarketBuilder} from "../mocks/MarketBuilder.sol";
+import {MockPriceOracle} from "../mocks/MockPriceOracle.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockInterestRateModel} from "../mocks/MockInterestRateModel.sol";
 
@@ -18,11 +22,17 @@ contract AccrualOverflowTest is Test {
     LendingMarketHarness internal market;
     MockERC20 internal base;
     MockInterestRateModel internal irm;
+    MockPriceOracle internal oracle;
+    address internal guardian = makeAddr("guardian");
 
     function setUp() public {
         base = new MockERC20("USD Coin", "USDC", 6);
         irm = new MockInterestRateModel(0, 0, 0.1e18);
-        market = new LendingMarketHarness(address(base), address(irm));
+        oracle = new MockPriceOracle();
+        LendingMarket.MarketConfig memory cfg =
+            MarketBuilder.config(address(base), address(irm), address(oracle), address(this), guardian);
+        ILendingMarket.CollateralConfig[] memory noCollateral = new ILendingMarket.CollateralConfig[](0);
+        market = new LendingMarketHarness(cfg, noCollateral);
     }
 
     /// @dev A rate large enough that rate * elapsed exceeds uint256 reverts on the multiplication.

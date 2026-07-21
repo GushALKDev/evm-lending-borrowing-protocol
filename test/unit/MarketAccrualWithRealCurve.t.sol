@@ -4,7 +4,11 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 
 import {InterestRateModel} from "../../src/InterestRateModel.sol";
+import {LendingMarket} from "../../src/LendingMarket.sol";
+import {ILendingMarket} from "../../src/interfaces/ILendingMarket.sol";
 import {LendingMarketHarness} from "../mocks/LendingMarketHarness.sol";
+import {MarketBuilder} from "../mocks/MarketBuilder.sol";
+import {MockPriceOracle} from "../mocks/MockPriceOracle.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 
 /**
@@ -25,6 +29,8 @@ contract MarketAccrualWithRealCurveTest is Test {
     LendingMarketHarness internal market;
     InterestRateModel internal irm;
     MockERC20 internal base;
+    MockPriceOracle internal oracle;
+    address internal guardian = makeAddr("guardian");
 
     address internal supplier = makeAddr("supplier");
     address internal borrower = makeAddr("borrower");
@@ -32,7 +38,11 @@ contract MarketAccrualWithRealCurveTest is Test {
     function setUp() public {
         base = new MockERC20("USD Coin", "USDC", 6);
         irm = new InterestRateModel(0, SLOPE_LOW, SLOPE_HIGH, KINK, RESERVE_FACTOR);
-        market = new LendingMarketHarness(address(base), address(irm));
+        oracle = new MockPriceOracle();
+        LendingMarket.MarketConfig memory cfg =
+            MarketBuilder.config(address(base), address(irm), address(oracle), address(this), guardian);
+        ILendingMarket.CollateralConfig[] memory noCollateral = new ILendingMarket.CollateralConfig[](0);
+        market = new LendingMarketHarness(cfg, noCollateral);
     }
 
     /// @dev At the kink, one year of accrual grows the borrow index by about 4%.

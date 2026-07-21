@@ -3,10 +3,13 @@ pragma solidity 0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
+import {LendingMarket} from "../../src/LendingMarket.sol";
 import {ILendingMarket} from "../../src/interfaces/ILendingMarket.sol";
 import {LendingMarketHarness} from "../mocks/LendingMarketHarness.sol";
+import {MarketBuilder} from "../mocks/MarketBuilder.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockInterestRateModel} from "../mocks/MockInterestRateModel.sol";
+import {MockPriceOracle} from "../mocks/MockPriceOracle.sol";
 
 /**
  * @title LendingMarketAccountingTest
@@ -27,10 +30,25 @@ contract LendingMarketAccountingTest is Test {
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
 
+    MockPriceOracle internal oracle;
+    address internal guardian = makeAddr("guardian");
+
+    ILendingMarket.CollateralConfig[] internal noCollateral;
+
     function setUp() public {
         base = new MockERC20("USD Coin", "USDC", 6);
         irm = new MockInterestRateModel(0, 0, 0.1e18);
-        market = new LendingMarketHarness(address(base), address(irm));
+        oracle = new MockPriceOracle();
+        market = new LendingMarketHarness(_config(address(base), address(irm)), noCollateral);
+    }
+
+    /// @dev Builds a MarketConfig with the given base and rate model, other fields at test defaults.
+    function _config(address baseToken, address interestRateModel)
+        internal
+        view
+        returns (LendingMarket.MarketConfig memory)
+    {
+        return MarketBuilder.config(baseToken, interestRateModel, address(oracle), address(this), guardian);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -47,24 +65,27 @@ contract LendingMarketAccountingTest is Test {
         assertEq(market.BASE_TOKEN(), address(base), "base token");
         assertEq(market.BASE_SCALE(), BASE_SCALE, "base scale");
         assertEq(address(market.INTEREST_RATE_MODEL()), address(irm), "rate model");
+        assertEq(address(market.ORACLE()), address(oracle), "oracle");
+        assertEq(market.GUARDIAN(), guardian, "guardian");
     }
 
     function test_constructor_revertsOnZeroBaseToken() public {
         vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InvalidConfiguration.selector, bytes32("baseToken")));
-        new LendingMarketHarness(address(0), address(irm));
+        new LendingMarketHarness(_config(address(0), address(irm)), noCollateral);
     }
 
     function test_constructor_revertsOnZeroRateModel() public {
         vm.expectRevert(
             abi.encodeWithSelector(ILendingMarket.InvalidConfiguration.selector, bytes32("interestRateModel"))
         );
-        new LendingMarketHarness(address(base), address(0));
+        new LendingMarketHarness(_config(address(base), address(0)), noCollateral);
     }
 
     /// @dev BASE_SCALE is read from the token, so a wrong literal cannot silently corrupt it.
     function test_constructor_derivesBaseScaleFromTheToken() public {
         MockERC20 eighteenDecimals = new MockERC20("Wrapped Ether", "WETH", 18);
-        LendingMarketHarness wethMarket = new LendingMarketHarness(address(eighteenDecimals), address(irm));
+        LendingMarketHarness wethMarket =
+            new LendingMarketHarness(_config(address(eighteenDecimals), address(irm)), noCollateral);
 
         assertEq(wethMarket.BASE_SCALE(), 1e18, "base scale follows the token");
     }
@@ -73,7 +94,7 @@ contract LendingMarketAccountingTest is Test {
     function test_constructor_revertsWhenBaseTokenHasNoDecimals() public {
         // The rate model is a non token contract, so it has no decimals() to call.
         vm.expectRevert();
-        new LendingMarketHarness(address(irm), address(irm));
+        new LendingMarketHarness(_config(address(irm), address(irm)), noCollateral);
     }
 
     /*//////////////////////////////////////////////////////////////
