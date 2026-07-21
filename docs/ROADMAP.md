@@ -315,6 +315,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-21 | Added the [testing documentation section](./tests/README.md): strategy and principles, a test-by-test inventory of all 126 tests with line-anchored links to the code, the invariant coverage map (which test asserts each of INV-1 to INV-14, and which are still unasserted), the mutation-check record including the flipped `presentValueSupply` that round trips failed to catch, and the per-phase testing deliverables. Updated at the close of every phase from here on |
 | 2026-07-21 | Phase 3 complete: base and collateral supply/withdraw, the full rebasing ERC20 base surface, and the SUPPLY/TRANSFER/WITHDRAW pause flags with the guardian-adds/owner-clears rule (`Ownable2Step` owner). The constructor now takes a `MarketConfig` bundle plus `CollateralConfig[]`, enforcing INV-12 ordering, decimals, and supply caps per asset; INV-13 deferred to Phase 7. All token-moving paths accrue first, follow CEI, and carry a `nonReentrant` guard. 36 new tests, 97.84% line coverage on the market (the 4 uncovered lines are the Phase 4 borrow/repay hook); 126 total green |
 | 2026-07-21 | Corrected an inaccurate totality claim in the rate model: Guide 5 Section 3.2 previously promised the rate functions were total over all `uint256`, which was both false (`fullMulDiv` overflows far out) and unnecessary. Utilization is bounded by the accounting to `~[0, 1e18]`, so no reachable state approaches overflow. Removed the earlier saturation clamp (`U_MAX_SANE`): no clamp is added, matching Aave. Refocused the liveness guarantee on the one reachable revert, the checked `rate * elapsed` index product in `accrue()`, and reworded INV-14 accordingly. Documentation and test correctness fix, no change to reachable behavior |
 | 2026-07-20 | Phase 2 complete: `InterestRateModel` with the immutable kinked curve, the derived floored supply rate, and constructor sanity checks enforcing INV-12; wired into the market's accrual and verified against the real curve at the kink and in the jump regime. 30 tests (18 unit, 6 fuzz, 4 market-accrual), the supply-rate floor mutation-verified |
@@ -339,3 +340,4 @@ Each phase should be completed before moving to the next. Within each phase, the
 - [Trade-offs and Risk Matrix](./04-tradeoffs.md)
 - [Solidity Implementation](./05-implementation.md)
 - [Security](./06-security.md)
+- [Testing Documentation](./tests/README.md)

@@ -11,6 +11,7 @@
 | :-------------------------- | :--------------------------------- | :---------- |
 | **[README](../README.md)**  | Project overview and setup         | ✅ Complete |
 | **[ROADMAP](./ROADMAP.md)** | Implementation phases and progress | ✅ Complete |
+| **[Testing](./tests/README.md)** | Test inventory and invariant coverage | 🔄 Phase 3 |
 | **[LICENSE](../LICENSE)**   | MIT License                        | ✅ Complete |
 
 ---
@@ -68,6 +69,15 @@
     - Pause and circuit-breaker philosophy
     - Audit checklist and the unit, fuzz, invariant, and fork testing plan (fork-tested oracle and token integration)
 
+### Testing
+
+7. **[Testing Documentation](./tests/README.md)**
+    - Strategy: the five test layers, the principles behind the assertions, mocks and harness
+    - Test-by-test inventory, every entry linked to its code
+    - Invariant coverage map: which test asserts each of INV-1 to INV-14
+    - Mutation checks, including the flipped rounding a round trip failed to catch
+    - Current status (126 tests, coverage) and the gaps each remaining phase closes
+
 ---
 
 ## 🗂️ Documentation Structure
@@ -82,7 +92,17 @@ docs/
 ├── 03-architecture.md           # System design and ADRs
 ├── 04-tradeoffs.md              # Risk analysis
 ├── 05-implementation.md         # Solidity interface specification
-└── 06-security.md               # Threat model, invariants, testing plan
+├── 06-security.md               # Threat model, invariants, testing plan
+│
+└── tests/                       # Testing documentation (updated every phase)
+    ├── README.md                # Index, status, invariant coverage map
+    ├── 01-strategy.md           # Layers, principles, infrastructure, commands
+    ├── 02-unit-accounting.md    # Phase 1 core
+    ├── 03-unit-supply-withdraw.md  # Phase 3 surface
+    ├── 04-unit-rate-model.md    # Phase 2 curve + accrual bounds
+    ├── 05-fuzz.md               # Rounding, monotonicity, rate properties
+    ├── 06-mutation-checks.md    # Which mutants each test catches
+    └── 07-gaps-and-roadmap.md   # What is not covered yet
 ```
 
 ---
@@ -96,15 +116,17 @@ docs/
 3. [Technical Architecture](./03-architecture.md) - See how it fits together
 4. [Solidity Implementation](./05-implementation.md) - Study the interface contracts
 5. [Security](./06-security.md) - Understand the invariants you must not break
-6. [ROADMAP](./ROADMAP.md) - Build it in order
+6. [Testing](./tests/README.md) - See how each invariant is actually asserted
+7. [ROADMAP](./ROADMAP.md) - Build it in order
 
 ### For Auditors
 
 1. [Technical Architecture](./03-architecture.md) - System overview and ADRs
 2. [Protocol Mathematics](./02-mathematics.md) - Rounding directions, coverage condition
 3. [Security](./06-security.md) - Invariants (INV-1 first), scenarios, checklist
-4. [Trade-offs](./04-tradeoffs.md) - Known risks and accepted residuals
-5. [Solidity Implementation](./05-implementation.md) - Pre/postconditions to verify
+4. [Testing](./tests/README.md) - The invariant coverage map and what is *not* yet asserted
+5. [Trade-offs](./04-tradeoffs.md) - Known risks and accepted residuals
+6. [Solidity Implementation](./05-implementation.md) - Pre/postconditions to verify
 
 ### For Researchers
 
@@ -119,7 +141,7 @@ docs/
 
 See [ROADMAP.md](./ROADMAP.md) for detailed implementation progress across 10 phases and 76 trackable items.
 
-**Current Status:** Phase 0 (Documentation) - Complete ✅
+**Current Status:** Phase 3 (Supply & Withdraw) - Complete ✅ · 126 tests green, [inventory here](./tests/README.md)
 
 ---
 
