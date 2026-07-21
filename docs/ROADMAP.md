@@ -24,13 +24,13 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 1         | Core: Index Accounting & Storage       | 8      | 8         | 100%     |
 | 2         | Interest Rate Model                    | 6      | 6         | 100%     |
 | 3         | Supply & Withdraw                      | 8      | 8         | 100%     |
-| 4         | Borrow & Repay                         | 7      | 0         | 0%       |
+| 4         | Borrow & Repay                         | 7      | 7         | 100%     |
 | 5         | Oracle (Pyth + Chainlink)              | 10     | 0         | 0%       |
 | 6         | Absorb Liquidation                     | 8      | 0         | 0%       |
 | 7         | Reserves & Protocol Management         | 6      | 0         | 0%       |
 | 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 0         | 0%       |
 | 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **28**    | **37%**  |
+| **TOTAL** |                                        | **76** | **35**    | **46%**  |
 
 ---
 
@@ -174,13 +174,32 @@ Each phase should be completed before moving to the next. Within each phase, the
 >
 > **Dependencies:** Phase 3
 
-- [ ] **4.1** `withdraw(base)` borrow path: open/increase borrow, sign-crossing transitions through the single accounting path
-- [ ] **4.2** `isBorrowCollateralized()`: per-asset `borrowCollateralFactor`, collateral valued at `price - conf`
-- [ ] **4.3** `minBorrow` dust guard (reverts borrows that would leave `0 < debt < minBorrow`)
-- [ ] **4.4** `supply(base)` repay path: negative-to-positive crossing, `type(uint256).max` full repay
-- [ ] **4.5** Accrue-before-action enforced and tested on every mutating path
-- [ ] **4.6** Events: `Withdraw`/`Supply` carrying the borrow/repay split
-- [ ] **4.7** Unit + fuzz tests: sign transitions, capacity boundaries, dust rejection, health never reduced below the borrow threshold by any allowed action
+- [x] **4.1** `withdraw(base)` borrow path: open/increase borrow, sign-crossing transitions through the single accounting path
+- [x] **4.2** `isBorrowCollateralized()`: per-asset `borrowCollateralFactor`, collateral valued at `price - conf`
+- [x] **4.3** `minBorrow` dust guard (reverts borrows that would leave `0 < debt < minBorrow`)
+- [x] **4.4** `supply(base)` repay path: negative-to-positive crossing, `type(uint256).max` full repay
+- [x] **4.5** Accrue-before-action enforced and tested on every mutating path
+- [x] **4.6** Events: `Supply`/`Withdraw` cover the repay and borrow branches (see note)
+- [x] **4.7** Unit + fuzz tests: sign transitions, capacity boundaries, dust rejection, health never reduced below the borrow threshold by any allowed action
+
+> **Health check shape:** `_requireBorrowCollateralized` runs in two steps: push every price the
+> account's position depends on (`_pushPrices`, transactional, forwarding the fee budget), then
+> evaluate `_borrowCapacity`, a `view` that re-reads the prices just written. The split exists
+> because `isBorrowCollateralized` is `view` in `ILendingMarket` while the push is not, and both
+> callers must run *one* implementation of the capacity formula: a view that could disagree with the
+> check gating the borrow would be worse than no view at all.
+>
+> **4.6 events:** interface (frozen Phase 1) defines `Supply`/`Withdraw` with `amount` only; the
+> repay/supply split is derivable from principal deltas, matching Comet and keeping the
+> ERC20-adjacent shape. No event change.
+>
+> **Dust guard placement:** `minBorrow` is enforced against the *resulting* debt rather than the
+> borrowed amount, so it also rejects a partial repay that would strand a position in the dust band.
+> Repaying to exactly zero stays reachable, or a borrower could be trapped in a position they cannot
+> close (`test_minBorrow_doesNotBlockRepayingToZero`).
+>
+> **`InsufficientBalance` on the base path is now unreachable:** crossing below zero is a borrow, not
+> an error. The error remains declared for the collateral path.
 
 **Deliverables:**
 
@@ -315,6 +334,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-22 | Phase 4 complete: the negative-principal paths. `withdraw(base)` past zero opens or increases a borrow through the same accounting path (no `borrow()` function, no branch on the sign crossing), `supply(base)` repays and crosses back with the `type(uint256).max` full-repay sentinel. Real capacity math replaces the `NotImplementedYet` hook: collateral at `price - conf` floored, debt at `price + conf` ceiled, summed per asset over the `assetsIn` bitmap. `_requireBorrowCollateralized` splits into a transactional `_pushPrices` plus the `view` `_borrowCapacity` that the public `isBorrowCollateralized` shares, so the view can never disagree with the check gating the borrow. `minBorrow` enforced against the resulting debt, not the borrowed amount, so it also catches a repay stranding a position in the dust band while leaving repay-to-zero reachable. Item 4.6 closed without an event change: the Phase 1 interface already defines `Supply`/`Withdraw` as covering both branches and the interface wins over the roadmap wording. `InsufficientBalance` is now unreachable on the base path. 43 new tests (37 unit, 6 fuzz), 99.61% line coverage on the market; 169 total green. INV-9 and INV-10 asserted at the single-account level |
 | 2026-07-21 | Added the [testing documentation section](./tests/README.md): strategy and principles, a test-by-test inventory of all 126 tests with line-anchored links to the code, the invariant coverage map (which test asserts each of INV-1 to INV-14, and which are still unasserted), the mutation-check record including the flipped `presentValueSupply` that round trips failed to catch, and the per-phase testing deliverables. Updated at the close of every phase from here on |
 | 2026-07-21 | Phase 3 complete: base and collateral supply/withdraw, the full rebasing ERC20 base surface, and the SUPPLY/TRANSFER/WITHDRAW pause flags with the guardian-adds/owner-clears rule (`Ownable2Step` owner). The constructor now takes a `MarketConfig` bundle plus `CollateralConfig[]`, enforcing INV-12 ordering, decimals, and supply caps per asset; INV-13 deferred to Phase 7. All token-moving paths accrue first, follow CEI, and carry a `nonReentrant` guard. 36 new tests, 97.84% line coverage on the market (the 4 uncovered lines are the Phase 4 borrow/repay hook); 126 total green |
 | 2026-07-21 | Corrected an inaccurate totality claim in the rate model: Guide 5 Section 3.2 previously promised the rate functions were total over all `uint256`, which was both false (`fullMulDiv` overflows far out) and unnecessary. Utilization is bounded by the accounting to `~[0, 1e18]`, so no reachable state approaches overflow. Removed the earlier saturation clamp (`U_MAX_SANE`): no clamp is added, matching Aave. Refocused the liveness guarantee on the one reachable revert, the checked `rate * elapsed` index product in `accrue()`, and reworded INV-14 accordingly. Documentation and test correctness fix, no change to reachable behavior |

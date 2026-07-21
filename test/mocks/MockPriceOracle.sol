@@ -26,6 +26,11 @@ contract MockPriceOracle is IPriceOracle {
         feeds[asset] = Feed({price18: price18, conf18: conf18, set: true});
     }
 
+    /// @notice Clears an asset's feed, so both read paths revert as an unconfigured feed would.
+    function unsetPrice(address asset) external {
+        delete feeds[asset];
+    }
+
     /// @inheritdoc IPriceOracle
     function updateAndGetPrice(address asset, bytes[] calldata)
         external

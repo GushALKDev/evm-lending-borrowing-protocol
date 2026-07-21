@@ -101,10 +101,6 @@ contract LendingMarketHarness is LendingMarket {
         revert NotImplemented();
     }
 
-    function isBorrowCollateralized(address) external pure returns (bool) {
-        revert NotImplemented();
-    }
-
     function isLiquidatable(address) external pure returns (bool) {
         revert NotImplemented();
     }

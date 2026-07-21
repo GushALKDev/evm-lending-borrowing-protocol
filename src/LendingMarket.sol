@@ -500,7 +500,7 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     {
         _accrue();
         if (asset == BASE_TOKEN) {
-            _withdrawBase(msg.sender, amount);
+            _withdrawBase(msg.sender, amount, priceUpdate);
         } else {
             _withdrawCollateral(msg.sender, asset, amount, priceUpdate);
         }
@@ -508,24 +508,35 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     }
 
     /**
-     * @notice Withdraws base down toward zero. Borrowing past zero arrives in Phase 4.
-     * @dev Reverts if the withdrawal would push the principal negative (that is a borrow), and if
-     *      the market lacks the cash to honor it.
+     * @notice Withdraws base, opening or increasing a borrow once the balance crosses below zero.
+     * @dev This is the protocol's single borrowing entry point: there is no separate borrow()
+     *      function, and the sign crossing needs no special case because the accounting path
+     *      decomposes both endpoints by sign. Reverts if the market lacks the cash to honor the
+     *      withdrawal, and, on the borrow branch, if the resulting debt is dust or uncollateralized.
      */
-    function _withdrawBase(address account, uint256 amount) internal {
+    function _withdrawBase(address account, uint256 amount, bytes[] calldata priceUpdate) internal {
         if (amount == 0) revert ZeroAmount();
 
         int104 oldPrincipal = userBasic[account].principal;
         int256 newBalance = _presentValue(oldPrincipal) - amount.toInt256();
-
-        // Phase 3 forbids crossing below zero; the borrow path lands in Phase 4.
-        if (newBalance < 0) revert InsufficientBalance(account, balanceOf(account), amount);
 
         uint256 cash = _balanceOfBaseToken();
         if (amount > cash) revert InsufficientCash(amount, cash);
 
         int104 newPrincipal = _principalValue(newBalance);
         _updateBasePrincipal(account, oldPrincipal, newPrincipal);
+
+        // Borrow branch: the checks run against the post-write state, so the health check sees
+        // exactly the position the account is left holding.
+        if (newPrincipal < 0) {
+            // Dust guard: a debt too small to be worth absorbing must never be created. The bound is
+            // on the resulting debt, not on the borrowed amount, so it also catches a repay that
+            // would leave dust behind.
+            uint256 borrowPV = _presentValueBorrow(_borrowPart(newPrincipal));
+            if (borrowPV < MIN_BORROW) revert MinBorrowNotMet(borrowPV, MIN_BORROW);
+
+            _requireBorrowCollateralized(account, priceUpdate);
+        }
 
         IERC20(BASE_TOKEN).safeTransfer(account, amount);
 
@@ -540,8 +551,6 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
 
     /**
      * @notice Withdraws collateral, running the health check only if the account has debt.
-     * @dev In Phase 3 debt cannot exist, so the health check is a no-op; the hook is wired against
-     *      the oracle now so Phase 4 only has to enable the borrow path.
      */
     function _withdrawCollateral(address account, address asset, uint256 amount, bytes[] calldata priceUpdate)
         internal
@@ -569,19 +578,86 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     }
 
     /*//////////////////////////////////////////////////////////////
-                            HEALTH (HOOK)
+                           HEALTH AND CAPACITY
     //////////////////////////////////////////////////////////////*/
 
+    /// @inheritdoc ILendingMarket
+    function isBorrowCollateralized(address account) external view returns (bool) {
+        (uint256 debtUSD, uint256 capacityUSD) = _borrowCapacity(account);
+        return debtUSD <= capacityUSD;
+    }
+
     /**
-     * @notice Health check hook against the oracle, enforced after any health-reducing action.
-     * @dev Phase 3 has no debt path, so this is never triggered with a negative principal yet. The
-     *      capacity computation (collateral at price - conf, debt at price + conf) lands in Phase 4.
+     * @notice Health check enforced after any action that can reduce an account's health.
+     * @dev Two steps on purpose: push every price the account's position depends on, then run the
+     *      same pure-read capacity math the public view runs. Splitting them is what lets one
+     *      implementation of the formula serve both callers even though the view is `view` and the
+     *      push is not: the only state-changing part is the push itself.
+     * @param account Account whose health must hold.
+     * @param priceUpdate Signed oracle update payloads for the base and every held collateral.
      */
     function _requireBorrowCollateralized(address account, bytes[] calldata priceUpdate) internal virtual {
-        // Placeholder until Phase 4 wires the full capacity math. Silence unused-parameter lint.
-        priceUpdate;
-        account;
-        revert NotImplementedYet("isBorrowCollateralized");
+        _pushPrices(account, priceUpdate);
+
+        (uint256 debtUSD, uint256 capacityUSD) = _borrowCapacity(account);
+        if (debtUSD > capacityUSD) revert NotCollateralized(account, debtUSD, capacityUSD);
+    }
+
+    /**
+     * @notice Pushes the caller's price update on chain for the base and every collateral held.
+     * @dev Forwards the remaining ETH balance as the fee budget on each call; the oracle refunds its
+     *      surplus and _refundExcessValue sweeps the rest back to the caller at the end of the
+     *      external function. Return values are discarded: _borrowCapacity re-reads the stored
+     *      prices these calls just wrote.
+     * @param account Account whose held assets determine which feeds to update.
+     * @param priceUpdate Signed oracle update payloads.
+     */
+    function _pushPrices(address account, bytes[] calldata priceUpdate) internal {
+        ORACLE.updateAndGetPrice{value: address(this).balance}(BASE_TOKEN, priceUpdate);
+
+        uint16 assetsIn = userBasic[account].assetsIn;
+        for (uint8 i = 0; i < NUM_ASSETS; i++) {
+            if (assetsIn & uint16(1 << i) == 0) continue;
+            ORACLE.updateAndGetPrice{value: address(this).balance}(assetByOffset[i], priceUpdate);
+        }
+    }
+
+    /**
+     * @notice Debt and borrowing capacity of an account, both in USD at 1e18 scale.
+     * @dev The one place the capacity formula lives (Guide 2, Section 7). Collateral is valued at
+     *      the low edge of the confidence band and floors; debt is valued at the high edge and
+     *      ceils. Both directions err toward calling a healthy account unhealthy, never the reverse.
+     * @param account Account to value.
+     * @return debtUSD Debt present value at price + conf, rounded up.
+     * @return capacityUSD Sum of collateral value at price - conf times borrowCF, each term floored.
+     */
+    function _borrowCapacity(address account) internal view returns (uint256 debtUSD, uint256 capacityUSD) {
+        uint256 borrowPV = _presentValueBorrow(_borrowPart(userBasic[account].principal));
+
+        (uint256 basePrice, uint256 baseConf) = ORACLE.getPrice(BASE_TOKEN);
+        // Debt at the high edge of the band, rounded up: an uncertain base price makes the debt
+        // count for more, never less.
+        debtUSD = FixedPointMathLib.fullMulDivUp(borrowPV, basePrice + baseConf, BASE_SCALE);
+
+        uint16 assetsIn = userBasic[account].assetsIn;
+        for (uint8 i = 0; i < NUM_ASSETS; i++) {
+            if (assetsIn & uint16(1 << i) == 0) continue;
+
+            address asset = assetByOffset[i];
+            CollateralConfig memory config = collateralConfig[asset];
+            (uint256 price, uint256 conf) = ORACLE.getPrice(asset);
+
+            // conf may exceed price only if the oracle passed a price it should have rejected; the
+            // subtraction reverting is the correct failure mode, not a clamp to zero.
+            uint256 lowEdge = price - conf;
+            uint256 balance = userCollateralBalance[account][asset];
+
+            // Floors once over the whole product rather than per factor: two flooring steps would
+            // discard more of the borrower's capacity than the policy calls for.
+            capacityUSD += FixedPointMathLib.fullMulDiv(
+                balance * config.borrowCollateralFactor, lowEdge, 10 ** config.decimals * FACTOR_SCALE
+            );
+        }
     }
 
     /*//////////////////////////////////////////////////////////////

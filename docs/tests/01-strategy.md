@@ -41,7 +41,7 @@ All shared scaffolding lives in [`test/mocks/`](../../test/mocks).
 | [`MarketBuilder.sol`](../../test/mocks/MarketBuilder.sol) | Library producing a `MarketConfig` and `CollateralConfig` at reference defaults, overridable field by field. Constructor-revert tests mutate exactly one field, so the assertion is unambiguous about which check fired. |
 | [`MockERC20.sol`](../../test/mocks/MockERC20.sol) | Minimal ERC20 with configurable `decimals()` and open `mint`/`burn`. Used as USDC (6 dec) and WETH (18 dec).                                                                                 |
 | [`MockInterestRateModel.sol`](../../test/mocks/MockInterestRateModel.sol) | Returns rates set directly via `setRates`, ignoring utilization. Lets accrual tests drive index growth without going through the curve.                              |
-| [`MockPriceOracle.sol`](../../test/mocks/MockPriceOracle.sol) | Per-asset `(price18, conf18)` set via `setPrice`. Wired since Phase 3; exercised from Phase 4 on, when health checks start reading prices.                                  |
+| [`MockPriceOracle.sol`](../../test/mocks/MockPriceOracle.sol) | Per-asset `(price18, conf18)` set via `setPrice`. Wired since Phase 3; exercised from Phase 4 on, when health checks start reading prices. `unsetPrice` clears a feed so both read paths revert, which is how the repay path is tested to need no oracle at all.                                  |
 
 **Why the harness exists.** The conversion primitives are `internal` because none of them is part of `ILendingMarket`; they were public only because tests called them. Moving them behind the harness shrank the deployed public surface from 15 methods to 9 without losing a single assertion.
 

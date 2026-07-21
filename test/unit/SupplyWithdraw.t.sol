@@ -128,13 +128,20 @@ contract SupplyWithdrawTest is Test {
         assertEq(market.getPrincipal(alice), 0, "principal zeroed");
     }
 
-    /// @dev Phase 3 forbids crossing below zero; borrowing lands in Phase 4.
-    function test_withdrawBase_revertsWhenItWouldBorrow() public {
-        vm.prank(alice);
-        market.supply(address(base), 1_000e6);
+    /// @dev Crossing below zero is a borrow (Phase 4), so it is refused on health, not on balance:
+    ///      alice has posted no collateral, leaving her zero capacity against the new debt.
+    function test_withdrawBase_crossingBelowZeroIsRefusedWithoutCollateral() public {
+        oracle.setPrice(address(base), 1e18, 0);
+        oracle.setPrice(address(weth), 2_000e18, 0);
 
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InsufficientBalance.selector, alice, 1_000e6, 1_500e6));
+        market.supply(address(base), 1_000e6);
+        // Bob funds the cash the borrow would draw on, so the check under test is health, not cash.
+        vm.prank(bob);
+        market.supply(address(base), 10_000e6);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.NotCollateralized.selector, alice, 500e18, 0));
         market.withdraw(address(base), 1_500e6, new bytes[](0));
     }
 

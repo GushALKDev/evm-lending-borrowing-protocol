@@ -11,7 +11,7 @@
 | :-------------------------- | :--------------------------------- | :---------- |
 | **[README](../README.md)**  | Project overview and setup         | ✅ Complete |
 | **[ROADMAP](./ROADMAP.md)** | Implementation phases and progress | ✅ Complete |
-| **[Testing](./tests/README.md)** | Test inventory and invariant coverage | 🔄 Phase 3 |
+| **[Testing](./tests/README.md)** | Test inventory and invariant coverage | 🔄 Phase 4 |
 | **[LICENSE](../LICENSE)**   | MIT License                        | ✅ Complete |
 
 ---
@@ -76,7 +76,7 @@
     - Test-by-test inventory, every entry linked to its code
     - Invariant coverage map: which test asserts each of INV-1 to INV-14
     - Mutation checks, including the flipped rounding a round trip failed to catch
-    - Current status (126 tests, coverage) and the gaps each remaining phase closes
+    - Current status (169 tests, coverage) and the gaps each remaining phase closes
 
 ---
 
@@ -102,7 +102,8 @@ docs/
     ├── 04-unit-rate-model.md    # Phase 2 curve + accrual bounds
     ├── 05-fuzz.md               # Rounding, monotonicity, rate properties
     ├── 06-mutation-checks.md    # Which mutants each test catches
-    └── 07-gaps-and-roadmap.md   # What is not covered yet
+    ├── 07-gaps-and-roadmap.md   # What is not covered yet
+    └── 08-unit-borrow-repay.md  # Phase 4 borrow/repay surface + capacity fuzz
 ```
 
 ---
@@ -141,7 +142,7 @@ docs/
 
 See [ROADMAP.md](./ROADMAP.md) for detailed implementation progress across 10 phases and 76 trackable items.
 
-**Current Status:** Phase 3 (Supply & Withdraw) - Complete ✅ · 126 tests green, [inventory here](./tests/README.md)
+**Current Status:** Phase 4 (Borrow & Repay) - Complete ✅ · 169 tests green, [inventory here](./tests/README.md)
 
 ---
 
