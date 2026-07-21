@@ -11,6 +11,12 @@
       "rev": "69c8def5f222ff96f2b5beff05dfba996368aa79"
     }
   },
+  "lib/pyth-sdk-solidity": {
+    "tag": {
+      "name": "v2.2.0",
+      "rev": "11d6bcfc2e56885535a9a8e3c8417847cb20be14"
+    }
+  },
   "lib/solady": {
     "tag": {
       "name": "v0.1.26",

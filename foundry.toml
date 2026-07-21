@@ -15,6 +15,7 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "solady/=lib/solady/src/",
     "forge-std/=lib/forge-std/src/",
+    "@pythnetwork/pyth-sdk-solidity/=lib/pyth-sdk-solidity/",
 ]
 
 [profile.default.fuzz]
