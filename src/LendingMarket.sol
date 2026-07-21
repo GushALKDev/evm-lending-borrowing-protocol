@@ -1,27 +1,33 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeCastLib} from "solady/utils/SafeCastLib.sol";
 
 import {ILendingMarket} from "./interfaces/ILendingMarket.sol";
 import {IInterestRateModel} from "./interfaces/IInterestRateModel.sol";
+import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 
 /**
  * @title LendingMarket
  * @author GushALKDev
  * @notice Single base asset money market in the style of Compound III: one borrowable base asset,
- *         inert supply-only collateral, index based interest accrual, and derived reserves.
- * @dev Phase 1 scope: storage layout, the principal / present value conversion pair, index accrual,
- *      utilization, the rebasing views, and the single accounting path every base balance change
- *      must route through. User facing actions arrive in later phases.
- *
- *      Rounding policy (Guide 2, Section 10) is load bearing: every division where the protocol and
+ *         inert supply-only collateral, index based interest accrual, and derived reserves. The
+ *         market is itself the rebasing ERC20 claim on the base supply (lmUSDC).
+ * @dev Rounding policy (Guide 2, Section 10) is load bearing: every division where the protocol and
  *      an account sit on opposite sides rounds toward the protocol. Supply side rounds down, borrow
  *      side rounds up, without exception.
+ *
+ *      Every state-changing function accrues first, then follows checks-effects-interactions with a
+ *      nonReentrant guard on the token-moving paths.
  */
-abstract contract LendingMarket is ILendingMarket {
+abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     using SafeCastLib for uint256;
     using SafeCastLib for int256;
 
@@ -58,6 +64,28 @@ abstract contract LendingMarket is ILendingMarket {
     /// @notice Immutable rate policy driving every accrual.
     IInterestRateModel public immutable INTEREST_RATE_MODEL;
 
+    /// @notice Immutable price source consulted on health-reducing actions.
+    IPriceOracle public immutable ORACLE;
+
+    /// @notice Fast key that may add pause flags but never clear them.
+    address public immutable GUARDIAN;
+
+    /// @notice Smallest debt an account may hold, guarding against dust debts.
+    uint256 public immutable MIN_BORROW;
+
+    /// @notice Reserve level below which buyCollateral sells inventory.
+    uint256 public immutable TARGET_RESERVES;
+
+    /// @notice Number of listed collateral assets.
+    uint8 public immutable NUM_ASSETS;
+
+    /*//////////////////////////////////////////////////////////////
+                              ERC20 METADATA
+    //////////////////////////////////////////////////////////////*/
+
+    string internal constant NAME = "Lending Market USDC";
+    string internal constant SYMBOL = "lmUSDC";
+
     /*//////////////////////////////////////////////////////////////
                                 STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -68,26 +96,86 @@ abstract contract LendingMarket is ILendingMarket {
     /// @notice Per account signed base principal and collateral membership bitmap.
     mapping(address account => UserBasic basic) internal userBasic;
 
+    /// @notice Per account, per asset posted collateral in the asset's native decimals.
+    mapping(address account => mapping(address asset => uint128 amount)) internal userCollateralBalance;
+
+    /// @notice Total collateral posted per asset, protocol-held inventory included.
+    mapping(address asset => uint128 total) public totalsCollateral;
+
+    /// @notice Immutable per collateral risk config, keyed by asset, populated in the constructor.
+    mapping(address asset => CollateralConfig config) internal collateralConfig;
+
+    /// @notice Listed collateral assets, indexed by their assetsIn bit offset.
+    mapping(uint8 offset => address asset) internal assetByOffset;
+
+    /// @notice ERC20 allowances for the rebasing base claim.
+    mapping(address owner => mapping(address spender => uint256 amount)) public allowance;
+
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Wires the immutable dependencies and seeds both indexes at BASE_INDEX_SCALE.
-     * @dev Base decimals are read from the token rather than passed in: a mismatched literal would
-     *      corrupt every base denominated quantity (minBorrow, absorb settlement, buyCollateral
-     *      quotes) silently instead of reverting. A token without decimals() reverts here, which is
-     *      the same outcome validating a passed in value would produce.
-     * @param baseToken The single borrowable base asset.
-     * @param interestRateModel Immutable rate policy contract.
+     * @notice Configuration bundle for the market deployment.
+     * @dev Grouped into a struct to keep the constructor signature readable and stack-safe.
      */
-    constructor(address baseToken, address interestRateModel) {
-        if (baseToken == address(0)) revert InvalidConfiguration("baseToken");
-        if (interestRateModel == address(0)) revert InvalidConfiguration("interestRateModel");
+    struct MarketConfig {
+        address baseToken;
+        address interestRateModel;
+        address oracle;
+        address owner;
+        address guardian;
+        uint256 minBorrow;
+        uint256 targetReserves;
+    }
 
-        BASE_TOKEN = baseToken;
-        BASE_SCALE = 10 ** IERC20Metadata(baseToken).decimals();
-        INTEREST_RATE_MODEL = IInterestRateModel(interestRateModel);
+    /**
+     * @notice Wires the immutable dependencies, lists the collateral assets, and seeds both indexes.
+     * @dev Base decimals are read from the token rather than passed in: a mismatched literal would
+     *      corrupt every base denominated quantity silently instead of reverting. Collateral factor
+     *      ordering (INV-12) and per-asset sanity are enforced here; the absorb coverage condition
+     *      (INV-13) is enforced in Phase 7 once the oracle supplies MAX_CONFIDENCE_BPS.
+     * @param cfg Market-level immutable configuration.
+     * @param collaterals Per collateral risk configs, in assetsIn bit-offset order (at most 16).
+     */
+    constructor(MarketConfig memory cfg, CollateralConfig[] memory collaterals) Ownable(cfg.owner) {
+        if (cfg.baseToken == address(0)) revert InvalidConfiguration("baseToken");
+        if (cfg.interestRateModel == address(0)) revert InvalidConfiguration("interestRateModel");
+        if (cfg.oracle == address(0)) revert InvalidConfiguration("oracle");
+        if (cfg.guardian == address(0)) revert InvalidConfiguration("guardian");
+        if (cfg.minBorrow == 0) revert InvalidConfiguration("minBorrow");
+        // assetsIn is a uint16 bitmap, so at most 16 collateral assets can be listed.
+        if (collaterals.length > 16) revert InvalidConfiguration("numAssets");
+
+        BASE_TOKEN = cfg.baseToken;
+        BASE_SCALE = 10 ** IERC20Metadata(cfg.baseToken).decimals();
+        INTEREST_RATE_MODEL = IInterestRateModel(cfg.interestRateModel);
+        ORACLE = IPriceOracle(cfg.oracle);
+        GUARDIAN = cfg.guardian;
+        MIN_BORROW = cfg.minBorrow;
+        TARGET_RESERVES = cfg.targetReserves;
+        NUM_ASSETS = uint8(collaterals.length);
+
+        for (uint8 i = 0; i < collaterals.length; i++) {
+            CollateralConfig memory c = collaterals[i];
+            if (c.asset == address(0)) revert InvalidConfiguration("collateralAsset");
+            // INV-12: 0 < borrowCF < liquidateCF < FACTOR_SCALE.
+            if (c.borrowCollateralFactor == 0 || c.borrowCollateralFactor >= c.liquidateCollateralFactor) {
+                revert InvalidConfiguration("borrowCF");
+            }
+            if (c.liquidateCollateralFactor >= FACTOR_SCALE) revert InvalidConfiguration("liquidateCF");
+            if (c.liquidationFactor == 0 || c.liquidationFactor > FACTOR_SCALE) {
+                revert InvalidConfiguration("liquidationFactor");
+            }
+            if (c.storeFrontPriceFactor == 0 || c.storeFrontPriceFactor > FACTOR_SCALE) {
+                revert InvalidConfiguration("storeFrontPriceFactor");
+            }
+            if (c.supplyCap == 0) revert InvalidConfiguration("supplyCap");
+            if (c.decimals != IERC20Metadata(c.asset).decimals()) revert InvalidConfiguration("decimals");
+
+            collateralConfig[c.asset] = c;
+            assetByOffset[i] = c.asset;
+        }
 
         marketState.baseSupplyIndex = BASE_INDEX_SCALE;
         marketState.baseBorrowIndex = BASE_INDEX_SCALE;
@@ -310,7 +398,335 @@ abstract contract LendingMarket is ILendingMarket {
     function _balanceOfBaseToken() internal view virtual returns (uint256) {
         // Deliberately not defensive: an unreadable base balance means reserves are unknowable, and
         // reporting zero would understate them. Bubbling the revert fails closed instead.
-        return IERC20Metadata(BASE_TOKEN).balanceOf(address(this));
+        return IERC20(BASE_TOKEN).balanceOf(address(this));
+    }
+
+    /// @inheritdoc ILendingMarket
+    function userCollateral(address account, address asset) external view returns (uint128) {
+        return userCollateralBalance[account][asset];
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Reverts if the given pause flag is set.
+    modifier notPaused(uint8 flag) {
+        _requireNotPaused(flag);
+        _;
+    }
+
+    /// @dev Modifier body kept in an internal function so the check is not inlined at every use site.
+    function _requireNotPaused(uint8 flag) internal view {
+        if (marketState.pauseFlags & flag != 0) revert Paused(flag);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                SUPPLY
+    //////////////////////////////////////////////////////////////*/
+
+    /// @inheritdoc ILendingMarket
+    function supply(address asset, uint256 amount) external nonReentrant notPaused(PAUSE_SUPPLY) {
+        _accrue();
+        if (asset == BASE_TOKEN) {
+            _supplyBase(msg.sender, amount);
+        } else {
+            _supplyCollateral(msg.sender, asset, amount);
+        }
+    }
+
+    /**
+     * @notice Credits base supply (repaying debt first if the account is negative).
+     * @dev type(uint256).max repays the full current debt exactly and supplies nothing beyond it.
+     */
+    function _supplyBase(address account, uint256 amount) internal {
+        int104 oldPrincipal = userBasic[account].principal;
+
+        // Full-repay sentinel: cap the pulled amount at exactly the outstanding debt.
+        if (amount == type(uint256).max) {
+            uint256 debt = _presentValueBorrow(_borrowPart(oldPrincipal));
+            if (debt == 0) revert ZeroAmount();
+            amount = debt;
+        }
+        if (amount == 0) revert ZeroAmount();
+
+        int256 newBalance = _presentValue(oldPrincipal) + amount.toInt256();
+        int104 newPrincipal = _principalValue(newBalance);
+        _updateBasePrincipal(account, oldPrincipal, newPrincipal);
+
+        // CEI: pull tokens last.
+        IERC20(BASE_TOKEN).safeTransferFrom(msg.sender, address(this), amount);
+
+        emit Supply(account, amount);
+
+        // Balances are derived from principal, so the write above already changed balanceOf. This
+        // log only reports that implicit mint so indexers can track it. A pure repay leaves
+        // supplyPart at zero on both sides: nothing was minted, so nothing is logged.
+        uint256 supplyBefore = _presentValueSupply(_supplyPart(oldPrincipal));
+        uint256 supplyAfter = _presentValueSupply(_supplyPart(newPrincipal));
+        if (supplyAfter > supplyBefore) emit Transfer(address(0), account, supplyAfter - supplyBefore);
+    }
+
+    /**
+     * @notice Posts collateral into inert custody, enforcing the per-asset supply cap.
+     */
+    function _supplyCollateral(address account, address asset, uint256 amount) internal {
+        CollateralConfig memory config = _requireListed(asset);
+        if (amount == 0) revert ZeroAmount();
+
+        uint128 amount128 = amount.toUint128();
+        uint128 newTotal = totalsCollateral[asset] + amount128;
+        if (newTotal > config.supplyCap) revert SupplyCapExceeded(asset, config.supplyCap, newTotal);
+
+        totalsCollateral[asset] = newTotal;
+        userCollateralBalance[account][asset] += amount128;
+        _setAssetIn(account, asset);
+
+        IERC20(asset).safeTransferFrom(msg.sender, address(this), amount);
+
+        emit SupplyCollateral(account, asset, amount);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               WITHDRAW
+    //////////////////////////////////////////////////////////////*/
+
+    /// @inheritdoc ILendingMarket
+    function withdraw(address asset, uint256 amount, bytes[] calldata priceUpdate)
+        external
+        payable
+        nonReentrant
+        notPaused(PAUSE_WITHDRAW)
+    {
+        _accrue();
+        if (asset == BASE_TOKEN) {
+            _withdrawBase(msg.sender, amount);
+        } else {
+            _withdrawCollateral(msg.sender, asset, amount, priceUpdate);
+        }
+        _refundExcessValue();
+    }
+
+    /**
+     * @notice Withdraws base down toward zero. Borrowing past zero arrives in Phase 4.
+     * @dev Reverts if the withdrawal would push the principal negative (that is a borrow), and if
+     *      the market lacks the cash to honor it.
+     */
+    function _withdrawBase(address account, uint256 amount) internal {
+        if (amount == 0) revert ZeroAmount();
+
+        int104 oldPrincipal = userBasic[account].principal;
+        int256 newBalance = _presentValue(oldPrincipal) - amount.toInt256();
+
+        // Phase 3 forbids crossing below zero; the borrow path lands in Phase 4.
+        if (newBalance < 0) revert InsufficientBalance(account, balanceOf(account), amount);
+
+        uint256 cash = _balanceOfBaseToken();
+        if (amount > cash) revert InsufficientCash(amount, cash);
+
+        int104 newPrincipal = _principalValue(newBalance);
+        _updateBasePrincipal(account, oldPrincipal, newPrincipal);
+
+        IERC20(BASE_TOKEN).safeTransfer(account, amount);
+
+        emit Withdraw(account, amount);
+
+        // Mirror of the supply path: reports the implicit burn that the principal write above
+        // already applied to balanceOf.
+        uint256 supplyBefore = _presentValueSupply(_supplyPart(oldPrincipal));
+        uint256 supplyAfter = _presentValueSupply(_supplyPart(newPrincipal));
+        if (supplyBefore > supplyAfter) emit Transfer(account, address(0), supplyBefore - supplyAfter);
+    }
+
+    /**
+     * @notice Withdraws collateral, running the health check only if the account has debt.
+     * @dev In Phase 3 debt cannot exist, so the health check is a no-op; the hook is wired against
+     *      the oracle now so Phase 4 only has to enable the borrow path.
+     */
+    function _withdrawCollateral(address account, address asset, uint256 amount, bytes[] calldata priceUpdate)
+        internal
+    {
+        _requireListed(asset);
+        if (amount == 0) revert ZeroAmount();
+
+        uint128 amount128 = amount.toUint128();
+        uint128 balance = userCollateralBalance[account][asset];
+        if (amount128 > balance) revert InsufficientCollateral(account, asset, balance, amount);
+
+        uint128 newBalance = balance - amount128;
+        userCollateralBalance[account][asset] = newBalance;
+        totalsCollateral[asset] -= amount128;
+        if (newBalance == 0) _clearAssetIn(account, asset);
+
+        // Only a borrower can be made unhealthy by removing collateral.
+        if (userBasic[account].principal < 0) {
+            _requireBorrowCollateralized(account, priceUpdate);
+        }
+
+        IERC20(asset).safeTransfer(account, amount);
+
+        emit WithdrawCollateral(account, asset, amount);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            HEALTH (HOOK)
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Health check hook against the oracle, enforced after any health-reducing action.
+     * @dev Phase 3 has no debt path, so this is never triggered with a negative principal yet. The
+     *      capacity computation (collateral at price - conf, debt at price + conf) lands in Phase 4.
+     */
+    function _requireBorrowCollateralized(address account, bytes[] calldata priceUpdate) internal virtual {
+        // Placeholder until Phase 4 wires the full capacity math. Silence unused-parameter lint.
+        priceUpdate;
+        account;
+        revert NotImplementedYet("isBorrowCollateralized");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          ERC20 (REBASING BASE)
+    //////////////////////////////////////////////////////////////*/
+
+    function name() external pure returns (string memory) {
+        return NAME;
+    }
+
+    function symbol() external pure returns (string memory) {
+        return SYMBOL;
+    }
+
+    /// @notice Matches the base asset so wallets display lmUSDC like USDC.
+    function decimals() external view returns (uint8) {
+        return IERC20Metadata(BASE_TOKEN).decimals();
+    }
+
+    /// @inheritdoc ILendingMarket
+    function transfer(address to, uint256 amount) external nonReentrant notPaused(PAUSE_TRANSFER) returns (bool) {
+        _transferBase(msg.sender, to, amount);
+        return true;
+    }
+
+    /// @inheritdoc ILendingMarket
+    function transferFrom(address from, address to, uint256 amount)
+        external
+        nonReentrant
+        notPaused(PAUSE_TRANSFER)
+        returns (bool)
+    {
+        _spendAllowance(from, msg.sender, amount);
+        _transferBase(from, to, amount);
+        return true;
+    }
+
+    /// @inheritdoc ILendingMarket
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    /**
+     * @notice Moves base supply between accounts as principal, never creating debt.
+     * @dev Accrues first, then requires the sender stay non-negative: transfers cannot borrow, so
+     *      no oracle is consulted. Sender burn rounds up, receiver credit rounds down (via the
+     *      conversion pair), both protocol-favorable.
+     */
+    function _transferBase(address from, address to, uint256 amount) internal {
+        if (to == address(0)) revert InvalidRecipient(to);
+        if (amount == 0) revert ZeroAmount();
+
+        _accrue();
+
+        uint256 fromBalance = balanceOf(from);
+        if (amount > fromBalance) revert TransferWouldBorrow(from, fromBalance, amount);
+
+        int104 fromOld = userBasic[from].principal;
+        int104 toOld = userBasic[to].principal;
+
+        int104 fromNew = _principalValue(_presentValue(fromOld) - amount.toInt256());
+        int104 toNew = _principalValue(_presentValue(toOld) + amount.toInt256());
+
+        _updateBasePrincipal(from, fromOld, fromNew);
+        _updateBasePrincipal(to, toOld, toNew);
+
+        emit Transfer(from, to, amount);
+    }
+
+    function _spendAllowance(address owner, address spender, uint256 amount) internal {
+        uint256 current = allowance[owner][spender];
+        if (current != type(uint256).max) {
+            if (amount > current) revert InsufficientAllowance(owner, spender, current, amount);
+            allowance[owner][spender] = current - amount;
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          GOVERNANCE / PAUSE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @inheritdoc ILendingMarket
+    function setPauseFlags(uint8 flags) external {
+        if (msg.sender == owner()) {
+            // Owner may set or clear any flag.
+        } else if (msg.sender == GUARDIAN) {
+            // Guardian may only add flags: the new set must be a superset of the current one.
+            uint8 current = marketState.pauseFlags;
+            if (flags & current != current) revert GuardianCannotUnpause(current, flags);
+        } else {
+            revert Unauthorized(msg.sender);
+        }
+
+        marketState.pauseFlags = flags;
+        emit PauseFlagsSet(msg.sender, flags);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          COLLATERAL HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Returns the config for a listed collateral asset, reverting if unlisted.
+    function _requireListed(address asset) internal view returns (CollateralConfig memory) {
+        CollateralConfig memory config = collateralConfig[asset];
+        if (config.asset == address(0)) revert UnknownAsset(asset);
+        return config;
+    }
+
+    /// @notice Sets the account's assetsIn bit for a collateral asset.
+    function _setAssetIn(address account, address asset) internal {
+        userBasic[account].assetsIn |= uint16(1 << _offsetOf(asset));
+    }
+
+    /// @notice Clears the account's assetsIn bit for a collateral asset.
+    function _clearAssetIn(address account, address asset) internal {
+        userBasic[account].assetsIn &= ~uint16(1 << _offsetOf(asset));
+    }
+
+    /// @notice Bit offset of a listed collateral asset in the assetsIn bitmap.
+    function _offsetOf(address asset) internal view returns (uint8) {
+        for (uint8 i = 0; i < NUM_ASSETS; i++) {
+            if (assetByOffset[i] == asset) return i;
+        }
+        revert UnknownAsset(asset);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                REFUND
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Sweeps any leftover msg.value back to the caller so the market never holds ETH.
+     * @dev Sweeping the whole balance rather than `msg.value - spent` is deliberate. ETH can only
+     *      reach this contract through a forced selfdestruct or a pre-deploy transfer, and sweeping
+     *      lets the next caller recover it. An exact refund would strand it instead, requiring an
+     *      owner-only rescue function: more governance surface for no user benefit.
+     */
+    function _refundExcessValue() internal {
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            (bool ok,) = msg.sender.call{value: balance}("");
+            if (!ok) revert RefundFailed(msg.sender, balance);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
