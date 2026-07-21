@@ -25,12 +25,12 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 2         | Interest Rate Model                    | 6      | 6         | 100%     |
 | 3         | Supply & Withdraw                      | 8      | 8         | 100%     |
 | 4         | Borrow & Repay                         | 7      | 7         | 100%     |
-| 5         | Oracle (Pyth + Chainlink)              | 10     | 0         | 0%       |
+| 5         | Oracle (Pyth + Chainlink)              | 10     | 10        | 100%     |
 | 6         | Absorb Liquidation                     | 8      | 0         | 0%       |
 | 7         | Reserves & Protocol Management         | 6      | 0         | 0%       |
 | 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 0         | 0%       |
 | 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **35**    | **46%**  |
+| **TOTAL** |                                        | **76** | **45**    | **59%**  |
 
 ---
 
@@ -216,16 +216,39 @@ Each phase should be completed before moving to the next. Within each phase, the
 >
 > **Dependencies:** Phase 4 (which coded against `IPriceOracle`)
 
-- [ ] **5.1** Interface `IPriceOracle` (`updateAndGetPrice` payable + `getPrice` view, both returning `(price18, conf18)`)
-- [ ] **5.2** Contract `PythChainlinkOracle.sol`: Pyth pull integration (`updatePriceFeeds`, caller-funded fee via `msg.value`, surplus refund)
-- [ ] **5.3** Staleness check (`MAX_STALENESS`)
-- [ ] **5.4** Confidence check (`MAX_CONFIDENCE_BPS`)
-- [ ] **5.5** Chainlink deviation anchor (`MAX_DEVIATION_BPS`, per-feed heartbeat staleness check)
-- [ ] **5.6** Price normalization to 18 decimals (Pyth expo, Chainlink 8 dec)
-- [ ] **5.7** Per-asset feed config (`asset => {pythFeedId, chainlinkFeed, heartbeat}` for base + collaterals)
-- [ ] **5.8** `LendingMarket` integration: payable price-consuming functions batch-update all needed feeds, forward `msg.value`, sweep refunds to the caller
-- [ ] **5.9** `MockPriceOracle` + `MockChainlinkFeed` for local tests
-- [ ] **5.10** Oracle tests: staleness, confidence, deviation, normalization, fee refund, fuzz
+- [x] **5.1** Interface `IPriceOracle` (`updateAndGetPrice` payable + `getPrice` view, both returning `(price18, conf18)`)
+- [x] **5.2** Contract `PythChainlinkOracle.sol`: Pyth pull integration (`updatePriceFeeds`, caller-funded fee via `msg.value`, surplus refund)
+- [x] **5.3** Staleness check (`MAX_STALENESS`)
+- [x] **5.4** Confidence check (`MAX_CONFIDENCE_BPS`)
+- [x] **5.5** Chainlink deviation anchor (`MAX_DEVIATION_BPS`, per-feed heartbeat staleness check)
+- [x] **5.6** Price normalization to 18 decimals (Pyth expo, Chainlink 8 dec)
+- [x] **5.7** Per-asset feed config (`asset => {pythFeedId, chainlinkFeed, heartbeat}` for base + collaterals)
+- [x] **5.8** `LendingMarket` integration: payable price-consuming functions batch-update all needed feeds, forward `msg.value`, sweep refunds to the caller
+- [x] **5.9** `MockPriceOracle` + `MockChainlinkFeed` for local tests
+- [x] **5.10** Oracle tests: staleness, confidence, deviation, normalization, fee refund, fuzz
+
+> **5.1 note:** the interface was written in Phase 1 and kept its exact shape; verified here against
+> the real contract. Both functions return `(price18, conf18)` and revert instead of degrading.
+>
+> **5.6 normalization:** Pyth carries a signed `expo` (`value * 10^expo`), normalized to the target
+> `18 + expo` exponent (scale up when positive, down when negative). Chainlink answers normalize from
+> the feed's own `decimals()` (8 for the reference feeds), rejecting a feed reporting more than 18.
+>
+> **5.8 receive() gap found and fixed:** the market forwards `address(this).balance` to the oracle
+> once per asset; the real oracle consumes only the Pyth fee and refunds the surplus back to the
+> market for the next per-asset call. The Phase 4 market had no `receive()`, so the refund reverted
+> `RefundFailed` — a latent bug the mock never exposed because Phase 4 tests sent no ETH and the mock
+> only refunds when `msg.value > 0`. Added `receive()` and corrected the `_refundExcessValue` comment,
+> which had claimed ETH could only arrive by selfdestruct or pre-deploy transfer. No other market
+> change: the `IPriceOracle` shape is unchanged, so `_pushPrices` / `_refundExcessValue` were already
+> correct.
+>
+> **5.9 mocks:** the Pyth surface uses the SDK's `MockPyth` (`createPriceFeedUpdateData`,
+> fee-charging `updatePriceFeeds`), so the fee/refund path is exercised for real. `MockChainlinkFeed`
+> is a settable `AggregatorV3` stand-in for the anchor and its heartbeat. `MockPriceOracle` (the
+> Phase 3/4 settable stand-in for the whole oracle) is retained for the market suites that do not
+> need the real validation pipeline. Note MockPyth only stores a strictly newer `publishTime`, so a
+> re-push at the same timestamp is silently a no-op — tests advance one second before re-pushing.
 
 **Deliverables:**
 
@@ -334,6 +357,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-22 | Phase 5 complete: `PythChainlinkOracle.sol`, the real price infrastructure behind the frozen `IPriceOracle` shape. Pyth pull oracle as the primary source (caller-funded `updatePriceFeeds` fee via `msg.value`, surplus refunded), Chainlink as a deviation anchor only (never a fallback). The four-stage validation pipeline lives in one internal `_validate` shared by `updateAndGetPrice` and `getPrice` so a view can never disagree with the transactional check: non-zero, staleness (`MAX_STALENESS`, applied via `getPriceUnsafe` so lending's looser policy governs both paths), confidence (`conf/price <= MAX_CONFIDENCE_BPS`), and Chainlink deviation (`\|pyth-anchor\|/anchor <= MAX_DEVIATION_BPS`) with the anchor's own per-feed heartbeat. Prices normalize to 1e18 from Pyth `expo` and from the Chainlink feed's `decimals()`. Pure policy: immutable feed config, no owner, no setters. Reference params `MAX_STALENESS=60`, `MAX_CONFIDENCE_BPS=200`, `MAX_DEVIATION_BPS=300`. Added the Pyth SDK submodule (`@pythnetwork/pyth-sdk-solidity`), a minimal local `IChainlinkAggregator`, and `MockChainlinkFeed`; tests use the SDK's `MockPyth`. Found and fixed a latent Phase 4 bug the mock hid: the market forwards its whole ETH balance per asset and the real oracle refunds the surplus back to it, but the market had no `receive()` — added it. 33 new tests (28 unit, 3 fuzz, 2 integration), 98.46% line / 95.45% branch coverage on the oracle; 202 total green |
 | 2026-07-22 | Phase 4 complete: the negative-principal paths. `withdraw(base)` past zero opens or increases a borrow through the same accounting path (no `borrow()` function, no branch on the sign crossing), `supply(base)` repays and crosses back with the `type(uint256).max` full-repay sentinel. Real capacity math replaces the `NotImplementedYet` hook: collateral at `price - conf` floored, debt at `price + conf` ceiled, summed per asset over the `assetsIn` bitmap. `_requireBorrowCollateralized` splits into a transactional `_pushPrices` plus the `view` `_borrowCapacity` that the public `isBorrowCollateralized` shares, so the view can never disagree with the check gating the borrow. `minBorrow` enforced against the resulting debt, not the borrowed amount, so it also catches a repay stranding a position in the dust band while leaving repay-to-zero reachable. Item 4.6 closed without an event change: the Phase 1 interface already defines `Supply`/`Withdraw` as covering both branches and the interface wins over the roadmap wording. `InsufficientBalance` is now unreachable on the base path. 43 new tests (37 unit, 6 fuzz), 99.61% line coverage on the market; 169 total green. INV-9 and INV-10 asserted at the single-account level |
 | 2026-07-21 | Added the [testing documentation section](./tests/README.md): strategy and principles, a test-by-test inventory of all 126 tests with line-anchored links to the code, the invariant coverage map (which test asserts each of INV-1 to INV-14, and which are still unasserted), the mutation-check record including the flipped `presentValueSupply` that round trips failed to catch, and the per-phase testing deliverables. Updated at the close of every phase from here on |
 | 2026-07-21 | Phase 3 complete: base and collateral supply/withdraw, the full rebasing ERC20 base surface, and the SUPPLY/TRANSFER/WITHDRAW pause flags with the guardian-adds/owner-clears rule (`Ownable2Step` owner). The constructor now takes a `MarketConfig` bundle plus `CollateralConfig[]`, enforcing INV-12 ordering, decimals, and supply caps per asset; INV-13 deferred to Phase 7. All token-moving paths accrue first, follow CEI, and carry a `nonReentrant` guard. 36 new tests, 97.84% line coverage on the market (the 4 uncovered lines are the Phase 4 borrow/repay hook); 126 total green |

@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Prerequisites:** [Guide 6: Security](../06-security.md)
-**Status:** Updated at the close of every roadmap phase (current: Phase 4)
+**Status:** Updated at the close of every roadmap phase (current: Phase 5)
 
 ---
 
@@ -19,6 +19,7 @@
 | **[Unit: Supply & Withdraw](./03-unit-supply-withdraw.md)** | Phase 3 surface: base and collateral flows, ERC20, pause flags, constructor validation |
 | **[Unit: Interest Rate Model](./04-unit-rate-model.md)** | Phase 2: the curve in isolation and wired into market accrual, accrual overflow bounds |
 | **[Unit + Fuzz: Borrow & Repay](./08-unit-borrow-repay.md)** | Phase 4: sign crossings, capacity boundaries, the dust guard, accrue-before-action |
+| **[Oracle](./09-oracle.md)**                   | Phase 5: the Pyth+Chainlink validation pipeline, normalization, fee/refund, and the market integration |
 | **[Fuzz](./05-fuzz.md)**                       | Conversion rounding, index monotonicity, rate properties, index-scale precision |
 | **[Mutation Checks](./06-mutation-checks.md)** | Which flipped rounding direction each test catches, and the one that round trips missed |
 | **[Gaps & Roadmap](./07-gaps-and-roadmap.md)** | What is not covered yet, and the testing deliverable of each remaining phase |
@@ -27,7 +28,7 @@
 
 ## 📊 Current Status
 
-**169 tests, all green** (Phase 4 close).
+**202 tests, all green** (Phase 5 close).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
@@ -37,11 +38,14 @@
 | [`InterestRateModelTest`](../../test/unit/InterestRateModel.t.sol)    | Unit  |    18 | 2     |
 | [`MarketAccrualWithRealCurveTest`](../../test/unit/MarketAccrualWithRealCurve.t.sol) | Unit |  4 | 2     |
 | [`AccrualOverflowTest`](../../test/unit/AccrualOverflow.t.sol)        | Unit  |     3 | 1     |
+| [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol)| Unit  |    28 | 5     |
 | [`ConversionRoundingTest`](../../test/fuzz/ConversionRounding.t.sol)  | Fuzz  |    19 | 1     |
 | [`InterestRateModelFuzzTest`](../../test/fuzz/InterestRateModel.t.sol)| Fuzz  |     6 | 2     |
 | [`BorrowCapacityFuzzTest`](../../test/fuzz/BorrowCapacity.t.sol)      | Fuzz  |     6 | 4     |
 | [`IndexPrecisionTest`](../../test/fuzz/IndexPrecision.t.sol)          | Fuzz  |     4 | 1     |
-| **Total**                                                            |       | **169** |     |
+| [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) | Fuzz | 3 | 5     |
+| [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
+| **Total**                                                            |       | **202** |     |
 
 ### Coverage
 
@@ -49,8 +53,9 @@
 | :-------------------------- | :--------------- | :--------------- | :------------- | :-------------- |
 | `src/InterestRateModel.sol` | 100.00% (17/17)  | 100.00% (25/25)  | 100.00% (4/4)  | 100.00% (3/3)   |
 | `src/LendingMarket.sol`     | 99.61% (255/256) | 96.93% (316/326) | 82.14% (46/56) | 100.00% (48/48) |
+| `src/PythChainlinkOracle.sol` | 98.46% (64/65) | 96.91% (94/97)   | 95.45% (21/22) | 100.00% (8/8)   |
 
-The single uncovered line in `LendingMarket.sol` is the fallthrough `revert UnknownAsset` in `_offsetOf`, which is unreachable in practice: every caller passes through `_requireListed` first, so it is a defensive guard rather than a live path. Branch coverage remains the metric below target, and the uncovered branches are now predominantly the Phase 5-7 stubs (`absorb`, `buyCollateral`, `withdrawReserves`); the >95% gate applies at Phase 8. Details in [Gaps & Roadmap](./07-gaps-and-roadmap.md).
+The single uncovered line in `LendingMarket.sol` is the fallthrough `revert UnknownAsset` in `_offsetOf`, which is unreachable in practice: every caller passes through `_requireListed` first, so it is a defensive guard rather than a live path. The one uncovered line in `PythChainlinkOracle.sol` is the positive-`targetExpo` scale-up branch of `_scalePyth` for the confidence value, unreachable with realistic feeds (a positive expo would need a mantissa small enough that conf still normalizes above zero). Branch coverage on `LendingMarket.sol` remains below target on the Phase 6-7 stubs (`absorb`, `buyCollateral`, `withdrawReserves`); the >95% gate applies at Phase 8. Details in [Gaps & Roadmap](./07-gaps-and-roadmap.md).
 
 ---
 
