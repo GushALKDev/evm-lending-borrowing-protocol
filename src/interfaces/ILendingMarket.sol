@@ -141,6 +141,10 @@ interface ILendingMarket {
     error InvalidRecipient(address recipient);
     error SupplyCapExceeded(address asset, uint128 cap, uint256 attempted);
     error InsufficientCash(uint256 requested, uint256 available);
+    error InsufficientBalance(address account, uint256 balance, uint256 amount);
+    error InsufficientCollateral(address account, address asset, uint128 balance, uint256 amount);
+    error RefundFailed(address to, uint256 amount);
+    error NotImplementedYet(bytes32 what);
 
     /*//////////////////////////////////////////////////////////////
                         ERRORS: HEALTH AND DEBT
@@ -150,6 +154,7 @@ interface ILendingMarket {
     error MinBorrowNotMet(uint256 borrowPV, uint256 minBorrow);
     error NotLiquidatable(address account, uint256 debtUSD, uint256 liqCapacityUSD);
     error TransferWouldBorrow(address from, uint256 balance, uint256 amount);
+    error InsufficientAllowance(address owner, address spender, uint256 allowance, uint256 amount);
 
     /*//////////////////////////////////////////////////////////////
                     ERRORS: STOREFRONT AND RESERVES
@@ -221,6 +226,51 @@ interface ILendingMarket {
      * @dev Permissionless, never pausable, idempotent within a block.
      */
     function accrue() external;
+
+    /*//////////////////////////////////////////////////////////////
+                          ERC20 (REBASING BASE)
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Standard ERC20 transfer event; mint uses address(0) as from, burn as to.
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+
+    /// @notice Standard ERC20 approval event for the rebasing base claim.
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
+
+    /**
+     * @notice Transfers base supply, moving principal between accounts.
+     * @dev Reverts if it would push the sender's principal negative: transfers cannot create debt,
+     *      so no oracle is consulted.
+     * @param to Recipient.
+     * @param amount Base amount to move.
+     * @return Always true on success (reverts otherwise).
+     */
+    function transfer(address to, uint256 amount) external returns (bool);
+
+    /**
+     * @notice Transfers base supply on behalf of `from`, spending the caller's allowance.
+     * @param from Account whose supply moves.
+     * @param to Recipient.
+     * @param amount Base amount to move.
+     * @return Always true on success (reverts otherwise).
+     */
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+
+    /**
+     * @notice Sets the caller's allowance for a spender.
+     * @param spender Approved spender.
+     * @param amount Allowance, type(uint256).max for an unlimited approval.
+     * @return Always true.
+     */
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    /**
+     * @notice Remaining allowance a spender may move on an owner's behalf.
+     * @param owner Token owner.
+     * @param spender Approved spender.
+     * @return Remaining allowance.
+     */
+    function allowance(address owner, address spender) external view returns (uint256);
 
     /*//////////////////////////////////////////////////////////////
                               GOVERNANCE
