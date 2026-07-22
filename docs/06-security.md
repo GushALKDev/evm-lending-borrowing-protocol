@@ -252,11 +252,11 @@ Scenario playbook:
 
 ### Solvency and liquidation
 
-- [ ] INV-13 coverage condition enforced in the constructor
+- [x] INV-13 coverage condition enforced in the constructor (reads `MAX_CONFIDENCE_BPS` from the oracle; tested at, below, and above the floor)
 - [ ] Absorb settlement handles surplus, exact, and shortfall cases; bad debt emitted
 - [ ] `buyCollateral` cannot sell user-owned collateral (guard is `quote <= getCollateralReserves = balanceOf(market) - totalsCollateral`, ADR-7)
 - [ ] Storefront discount bounded by the liquidation penalty for every parameter combination
-- [ ] `withdrawReserves` bounded by both `getReserves()` and cash
+- [x] `withdrawReserves` bounded by both `getReserves()` and cash (onlyOwner, nonReentrant, accrues first)
 
 ### Oracle
 

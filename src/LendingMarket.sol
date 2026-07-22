@@ -26,7 +26,7 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
  *      Every state-changing function accrues first, then follows checks-effects-interactions with a
  *      nonReentrant guard on the token-moving paths.
  */
-abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
+contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using SafeCastLib for uint256;
     using SafeCastLib for int256;
@@ -167,6 +167,12 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
             if (c.liquidationFactor == 0 || c.liquidationFactor > FACTOR_SCALE) {
                 revert InvalidConfiguration("liquidationFactor");
             }
+            // INV-13 (absorb coverage, Guide 2 Section 8): liquidationFactor must dominate liquidateCF
+            // widened by the oracle's max confidence, so a high-edge-eligible account stays covered.
+            uint256 coverageBound = FixedPointMathLib.fullMulDivUp(
+                c.liquidateCollateralFactor, FACTOR_SCALE + ORACLE.MAX_CONFIDENCE_BPS(), FACTOR_SCALE
+            );
+            if (c.liquidationFactor < coverageBound) revert InvalidConfiguration("coverage");
             if (c.storeFrontPriceFactor == 0 || c.storeFrontPriceFactor > FACTOR_SCALE) {
                 revert InvalidConfiguration("storeFrontPriceFactor");
             }
@@ -392,10 +398,10 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
 
     /**
      * @notice Base token cash currently held by the market.
-     * @dev Isolated so later phases and tests can reason about the single balanceOf read.
+     * @dev Isolated to the single balanceOf read that every reserve and cash calculation depends on.
      * @return Cash in base units.
      */
-    function _balanceOfBaseToken() internal view virtual returns (uint256) {
+    function _balanceOfBaseToken() internal view returns (uint256) {
         // Deliberately not defensive: an unreadable base balance means reserves are unknowable, and
         // reporting zero would understate them. Bubbling the revert fails closed instead.
         return IERC20(BASE_TOKEN).balanceOf(address(this));
@@ -752,7 +758,7 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
      * @param account Account whose health must hold.
      * @param priceUpdate Signed oracle update payloads for the base and every held collateral.
      */
-    function _requireBorrowCollateralized(address account, bytes[] calldata priceUpdate) internal virtual {
+    function _requireBorrowCollateralized(address account, bytes[] calldata priceUpdate) internal {
         _pushPrices(account, priceUpdate);
 
         uint256 debtUSD = _debtUSD(account);
@@ -935,6 +941,31 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     /*//////////////////////////////////////////////////////////////
                           GOVERNANCE / PAUSE
     //////////////////////////////////////////////////////////////*/
+
+    /// @inheritdoc ILendingMarket
+    function withdrawReserves(address to, uint256 amount) external onlyOwner nonReentrant {
+        if (to == address(0)) revert InvalidRecipient(to);
+
+        // Accrue first so reserves reflect interest up to now, not a stale snapshot.
+        _accrue();
+
+        // Two independent ceilings, both must hold; neither implies the other.
+        // Reserves bound: caps withdrawal at protocol equity. getReserves() already subtracts supplier
+        // claims (totalSupplyPV), so this is what keeps user deposits unreachable, not the cash bound.
+        int256 reserves = getReserves();
+        if (reserves < int256(amount)) revert InsufficientReserves(reserves, amount);
+
+        // Cash bound: never move base the market does not physically hold. Distinct from reserves
+        // because bad debt can push reserves above cash (equity that exists only as owed interest).
+        uint256 cash = _balanceOfBaseToken();
+        if (amount > cash) revert InsufficientCash(amount, cash);
+
+        // INTERACTIONS: no principal changes, so no supplier is credited; cash leaves and reserves
+        // fall by exactly `amount` through the derived formula.
+        IERC20(BASE_TOKEN).safeTransfer(to, amount);
+
+        emit WithdrawReserves(to, amount);
+    }
 
     /// @inheritdoc ILendingMarket
     function setPauseFlags(uint8 flags) external {

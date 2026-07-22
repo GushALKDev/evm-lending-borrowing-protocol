@@ -53,6 +53,12 @@ contract ReentrantPriceOracle is IPriceOracle {
         return (_read(asset), 0);
     }
 
+    /// @inheritdoc IPriceOracle
+    // solhint-disable-next-line func-name-mixedcase
+    function MAX_CONFIDENCE_BPS() external pure returns (uint256) {
+        return 200;
+    }
+
     function _read(address asset) internal view returns (uint256) {
         uint256 price = prices[asset];
         if (price == 0) revert PriceNotSet(asset);

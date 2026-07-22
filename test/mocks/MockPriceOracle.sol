@@ -18,8 +18,18 @@ contract MockPriceOracle is IPriceOracle {
 
     mapping(address asset => Feed feed) internal feeds;
 
+    /// @notice Max confidence half width the market reads for INV-13. Defaults to the reference 200
+    ///         bps; settable so constructor coverage tests can drive it to arbitrary values.
+    // solhint-disable-next-line func-name-mixedcase, var-name-mixedcase
+    uint256 public MAX_CONFIDENCE_BPS = 200;
+
     error PriceNotSet(address asset);
     error RefundFailed();
+
+    /// @notice Overrides the confidence ceiling reported to the market, for INV-13 constructor tests.
+    function setMaxConfidenceBps(uint256 bps) external {
+        MAX_CONFIDENCE_BPS = bps;
+    }
 
     /// @notice Sets the price and confidence for an asset, both at 1e18 scale.
     function setPrice(address asset, uint256 price18, uint256 conf18) external {

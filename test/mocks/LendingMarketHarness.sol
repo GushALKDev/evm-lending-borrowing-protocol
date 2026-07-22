@@ -6,14 +6,10 @@ import {ILendingMarket} from "../../src/interfaces/ILendingMarket.sol";
 
 /**
  * @title LendingMarketHarness
- * @notice Concrete deployable market exposing internals for tests, plus stubs for the surface that
- *         later phases fill in.
- * @dev Test only. Phase 4 to 7 replace the reverting stubs (absorb, buyCollateral, the health and
- *      quote views, withdrawReserves) with real implementations in the production contract.
+ * @notice Concrete deployable market exposing internals for tests. The full production surface is
+ *         now implemented; the harness only widens visibility for assertions.
  */
 contract LendingMarketHarness is LendingMarket {
-    error NotImplemented();
-
     constructor(MarketConfig memory cfg, CollateralConfig[] memory collaterals) LendingMarket(cfg, collaterals) {}
 
     /*//////////////////////////////////////////////////////////////
@@ -81,15 +77,5 @@ contract LendingMarketHarness is LendingMarket {
 
     function exposedPrincipalValue(int256 present) external view returns (int104) {
         return _principalValue(present);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                        NOT YET IMPLEMENTED
-    //////////////////////////////////////////////////////////////*/
-
-    // Filled in by Phase 7. Kept as a reverting stub so the market is deployable meanwhile.
-
-    function withdrawReserves(address, uint256) external pure {
-        revert NotImplemented();
     }
 }

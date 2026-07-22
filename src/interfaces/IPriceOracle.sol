@@ -31,4 +31,14 @@ interface IPriceOracle {
      * @return conf18 Confidence interval half width at 1e18 scale.
      */
     function getPrice(address asset) external view returns (uint256 price18, uint256 conf18);
+
+    /**
+     * @notice Maximum confidence half width over price the oracle accepts, in basis points.
+     * @dev The market reads this at construction to enforce the absorb coverage condition (INV-13):
+     *      a collateral must credit enough at liquidation to cover the worst-case high-edge valuation
+     *      the oracle can pass. Immutable in every implementation.
+     * @return Max confidence in basis points against 10_000.
+     */
+    // solhint-disable-next-line func-name-mixedcase
+    function MAX_CONFIDENCE_BPS() external view returns (uint256);
 }
