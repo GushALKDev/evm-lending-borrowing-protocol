@@ -578,13 +578,155 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     }
 
     /*//////////////////////////////////////////////////////////////
+                              LIQUIDATION
+    //////////////////////////////////////////////////////////////*/
+
+    /// @inheritdoc ILendingMarket
+    function absorb(address account, bytes[] calldata priceUpdate)
+        external
+        payable
+        nonReentrant
+        notPaused(PAUSE_ABSORB)
+    {
+        _accrue();
+
+        // CHECKS: push every price the position depends on, then require eligibility at those prices.
+        _pushPrices(account, priceUpdate);
+        uint256 debtUSD = _debtUSD(account);
+        uint256 liqCapacityUSD = _liquidationCapacity(account);
+        if (debtUSD <= liqCapacityUSD) revert NotLiquidatable(account, debtUSD, liqCapacityUSD);
+
+        // EFFECTS: seize every held collateral into protocol ownership, accumulating the mid-price
+        // credit at the liquidation factor. totalsCollateral is untouched: the protocol now owns it.
+        uint256 creditValueUSD = _seizeCollateral(account);
+
+        (uint256 basePrice,) = ORACLE.getPrice(BASE_TOKEN);
+        uint256 creditBase = FixedPointMathLib.fullMulDiv(creditValueUSD, BASE_SCALE, basePrice);
+
+        int104 oldPrincipal = userBasic[account].principal;
+        uint256 debtPV = _presentValueBorrow(_borrowPart(oldPrincipal));
+
+        // Settlement through the single accounting path. A shortfall zeroes the account and is
+        // recognized as bad debt against reserves immediately; a surplus is credited as base supply.
+        uint256 badDebt = creditBase < debtPV ? debtPV - creditBase : 0;
+        int256 newBalance = -int256(debtPV) + int256(creditBase);
+        if (newBalance < 0) newBalance = 0;
+
+        _updateBasePrincipal(account, oldPrincipal, _principalValue(newBalance));
+
+        emit AbsorbDebt(msg.sender, account, debtPV, badDebt);
+
+        _refundExcessValue();
+    }
+
+    /**
+     * @notice Seizes every collateral the account holds into protocol ownership.
+     * @dev Zeroes each userCollateral balance and clears the assetsIn bit, but leaves totalsCollateral
+     *      unchanged: the inventory is now the protocol's, to be recovered through buyCollateral.
+     *      Seize value is marked at the mid price; the credit applies the per-asset liquidationFactor.
+     * @param account Account being absorbed.
+     * @return creditValueUSD Sum of seized value times liquidationFactor, USD at 1e18 scale, floored.
+     */
+    function _seizeCollateral(address account) internal returns (uint256 creditValueUSD) {
+        uint16 assetsIn = userBasic[account].assetsIn;
+        for (uint8 i = 0; i < NUM_ASSETS; i++) {
+            if (assetsIn & uint16(1 << i) == 0) continue;
+
+            address asset = assetByOffset[i];
+            uint128 amount = userCollateralBalance[account][asset];
+            CollateralConfig memory config = collateralConfig[asset];
+            (uint256 price,) = ORACLE.getPrice(asset);
+
+            uint256 collateralScale = 10 ** config.decimals;
+            uint256 seizeValueUSD = FixedPointMathLib.fullMulDiv(amount, price, collateralScale);
+            creditValueUSD += FixedPointMathLib.fullMulDiv(
+                amount * config.liquidationFactor, price, collateralScale * FACTOR_SCALE
+            );
+
+            userCollateralBalance[account][asset] = 0;
+            _clearAssetIn(account, asset);
+
+            emit AbsorbCollateral(msg.sender, account, asset, amount, seizeValueUSD);
+        }
+    }
+
+    /// @inheritdoc ILendingMarket
+    function buyCollateral(
+        address asset,
+        uint256 minAmount,
+        uint256 baseAmount,
+        address recipient,
+        bytes[] calldata priceUpdate
+    ) external payable nonReentrant notPaused(PAUSE_BUY) {
+        if (recipient == address(0)) revert InvalidRecipient(recipient);
+        if (baseAmount == 0) revert ZeroAmount();
+        _requireListed(asset);
+
+        _accrue();
+
+        // CHECKS: push the base and asset prices, then gate on the reserve deficit and the quote.
+        _pushBuyPrices(asset, priceUpdate);
+
+        int256 reserves = getReserves();
+        if (reserves >= int256(TARGET_RESERVES)) revert NotForSale(reserves, TARGET_RESERVES);
+
+        uint256 quote = quoteCollateral(asset, baseAmount);
+        if (quote < minAmount) revert TooMuchSlippage(quote, minAmount);
+
+        uint128 inventory = totalsCollateral[asset];
+        if (quote > inventory) revert InsufficientInventory(asset, quote, inventory);
+
+        // EFFECTS: the inventory leaves protocol ownership.
+        totalsCollateral[asset] = inventory - uint128(quote);
+
+        // INTERACTIONS (CEI: base in before collateral out). The base raises cash, hence reserves,
+        // through the derived formula; no principal changes, so no supplier is credited.
+        IERC20(BASE_TOKEN).safeTransferFrom(msg.sender, address(this), baseAmount);
+        IERC20(asset).safeTransfer(recipient, quote);
+
+        emit BuyCollateral(msg.sender, asset, baseAmount, quote);
+
+        _refundExcessValue();
+    }
+
+    /// @inheritdoc ILendingMarket
+    function quoteCollateral(address asset, uint256 baseAmount) public view returns (uint256) {
+        CollateralConfig memory config = _requireListed(asset);
+        (uint256 price,) = ORACLE.getPrice(asset);
+        (uint256 basePrice,) = ORACLE.getPrice(BASE_TOKEN);
+
+        // discount = storeFront * (1 - LF), floored; a smaller discount favors the protocol.
+        uint256 discount = FixedPointMathLib.mulDiv(
+            config.storeFrontPriceFactor, FACTOR_SCALE - config.liquidationFactor, FACTOR_SCALE
+        );
+        // askPrice = price * (1 - discount), floored: the buyer pays no less than this per unit.
+        uint256 askPrice = FixedPointMathLib.mulDiv(price, FACTOR_SCALE - discount, FACTOR_SCALE);
+
+        // quote = baseAmount * basePrice * collateralScale / (BASE_SCALE * askPrice), floored: the
+        // buyer receives no more collateral than the ask supports.
+        uint256 collateralScale = 10 ** config.decimals;
+        return FixedPointMathLib.fullMulDiv(baseAmount * basePrice, collateralScale, BASE_SCALE * askPrice);
+    }
+
+    /**
+     * @notice Pushes the base and one collateral asset price on chain for a buyCollateral call.
+     * @dev buyCollateral has no account, so it cannot reuse the assetsIn-driven _pushPrices; it needs
+     *      exactly the base (for reserves and the quote's base leg) and the asset being bought.
+     * @param asset Collateral asset whose price is needed.
+     * @param priceUpdate Signed oracle update payloads.
+     */
+    function _pushBuyPrices(address asset, bytes[] calldata priceUpdate) internal {
+        ORACLE.updateAndGetPrice{value: address(this).balance}(BASE_TOKEN, priceUpdate);
+        ORACLE.updateAndGetPrice{value: address(this).balance}(asset, priceUpdate);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                            HEALTH AND CAPACITY
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc ILendingMarket
     function isBorrowCollateralized(address account) external view returns (bool) {
-        (uint256 debtUSD, uint256 capacityUSD) = _borrowCapacity(account);
-        return debtUSD <= capacityUSD;
+        return _debtUSD(account) <= _borrowCapacity(account);
     }
 
     /**
@@ -599,7 +741,8 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     function _requireBorrowCollateralized(address account, bytes[] calldata priceUpdate) internal virtual {
         _pushPrices(account, priceUpdate);
 
-        (uint256 debtUSD, uint256 capacityUSD) = _borrowCapacity(account);
+        uint256 debtUSD = _debtUSD(account);
+        uint256 capacityUSD = _borrowCapacity(account);
         if (debtUSD > capacityUSD) revert NotCollateralized(account, debtUSD, capacityUSD);
     }
 
@@ -623,22 +766,28 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     }
 
     /**
-     * @notice Debt and borrowing capacity of an account, both in USD at 1e18 scale.
-     * @dev The one place the capacity formula lives (Guide 2, Section 7). Collateral is valued at
-     *      the low edge of the confidence band and floors; debt is valued at the high edge and
-     *      ceils. Both directions err toward calling a healthy account unhealthy, never the reverse.
+     * @notice Present value of an account's debt in USD at 1e18 scale.
+     * @dev The one place debt is valued (Guide 2, Section 7). Debt is taken at the high edge of the
+     *      confidence band and rounded up: an uncertain base price makes the debt count for more,
+     *      never less. Shared by _borrowCapacity and _liquidationCapacity so both weigh debt identically.
      * @param account Account to value.
      * @return debtUSD Debt present value at price + conf, rounded up.
+     */
+    function _debtUSD(address account) internal view returns (uint256 debtUSD) {
+        uint256 borrowPV = _presentValueBorrow(_borrowPart(userBasic[account].principal));
+        (uint256 basePrice, uint256 baseConf) = ORACLE.getPrice(BASE_TOKEN);
+        debtUSD = FixedPointMathLib.fullMulDivUp(borrowPV, basePrice + baseConf, BASE_SCALE);
+    }
+
+    /**
+     * @notice Borrowing capacity of an account in USD at 1e18 scale.
+     * @dev The one place the borrow-capacity formula lives (Guide 2, Section 7). Collateral is valued
+     *      at the low edge of the confidence band and floored, erring toward calling a healthy account
+     *      unhealthy, never the reverse. Debt is valued separately by _debtUSD; callers compose the two.
+     * @param account Account to value.
      * @return capacityUSD Sum of collateral value at price - conf times borrowCF, each term floored.
      */
-    function _borrowCapacity(address account) internal view returns (uint256 debtUSD, uint256 capacityUSD) {
-        uint256 borrowPV = _presentValueBorrow(_borrowPart(userBasic[account].principal));
-
-        (uint256 basePrice, uint256 baseConf) = ORACLE.getPrice(BASE_TOKEN);
-        // Debt at the high edge of the band, rounded up: an uncertain base price makes the debt
-        // count for more, never less.
-        debtUSD = FixedPointMathLib.fullMulDivUp(borrowPV, basePrice + baseConf, BASE_SCALE);
-
+    function _borrowCapacity(address account) internal view returns (uint256 capacityUSD) {
         uint16 assetsIn = userBasic[account].assetsIn;
         for (uint8 i = 0; i < NUM_ASSETS; i++) {
             if (assetsIn & uint16(1 << i) == 0) continue;
@@ -656,6 +805,38 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
             // discard more of the borrower's capacity than the policy calls for.
             capacityUSD += FixedPointMathLib.fullMulDiv(
                 balance * config.borrowCollateralFactor, lowEdge, 10 ** config.decimals * FACTOR_SCALE
+            );
+        }
+    }
+
+    /// @inheritdoc ILendingMarket
+    function isLiquidatable(address account) external view returns (bool) {
+        return _debtUSD(account) > _liquidationCapacity(account);
+    }
+
+    /**
+     * @notice Liquidation capacity of an account in USD at 1e18 scale.
+     * @dev The eligibility twin of _borrowCapacity (Guide 2, Section 7.1). Collateral is valued at
+     *      the *high* edge of the confidence band with liquidateCF, so an account is never absorbed
+     *      on a noisy tick; erring toward calling an unhealthy account healthy, the borrower-favorable
+     *      choice. Debt is valued separately by _debtUSD; callers compose the two.
+     * @param account Account to value.
+     * @return liqCapacityUSD Sum of collateral value at price + conf times liquidateCF, each floored.
+     */
+    function _liquidationCapacity(address account) internal view returns (uint256 liqCapacityUSD) {
+        uint16 assetsIn = userBasic[account].assetsIn;
+        for (uint8 i = 0; i < NUM_ASSETS; i++) {
+            if (assetsIn & uint16(1 << i) == 0) continue;
+
+            address asset = assetByOffset[i];
+            CollateralConfig memory config = collateralConfig[asset];
+            (uint256 price, uint256 conf) = ORACLE.getPrice(asset);
+
+            uint256 highEdge = price + conf;
+            uint256 balance = userCollateralBalance[account][asset];
+
+            liqCapacityUSD += FixedPointMathLib.fullMulDiv(
+                balance * config.liquidateCollateralFactor, highEdge, 10 ** config.decimals * FACTOR_SCALE
             );
         }
     }

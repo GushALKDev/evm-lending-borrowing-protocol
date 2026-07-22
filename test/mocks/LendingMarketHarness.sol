@@ -87,25 +87,9 @@ contract LendingMarketHarness is LendingMarket {
                         NOT YET IMPLEMENTED
     //////////////////////////////////////////////////////////////*/
 
-    // Filled in by Phases 4 to 7. Kept as reverting stubs so the market is deployable meanwhile.
-
-    function absorb(address, bytes[] calldata) external payable {
-        revert NotImplemented();
-    }
-
-    function buyCollateral(address, uint256, uint256, address, bytes[] calldata) external payable {
-        revert NotImplemented();
-    }
+    // Filled in by Phase 7. Kept as a reverting stub so the market is deployable meanwhile.
 
     function withdrawReserves(address, uint256) external pure {
-        revert NotImplemented();
-    }
-
-    function isLiquidatable(address) external pure returns (bool) {
-        revert NotImplemented();
-    }
-
-    function quoteCollateral(address, uint256) external pure returns (uint256) {
         revert NotImplemented();
     }
 }
