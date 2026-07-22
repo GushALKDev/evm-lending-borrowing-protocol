@@ -46,6 +46,20 @@
 
 Out of scope of this model: L1 consensus failures, Solidity compiler bugs, and Circle acting maliciously against its own token holders.
 
+### Asset-listing restrictions
+
+Collateral inventory available to `buyCollateral` is derived as `token.balanceOf(market) - totalsCollateral` ([Guide 3, ADR-7](./03-architecture.md#adr-7-collateral-total-as-user-claims-vs-whole-pool)). This derivation constrains which collateral tokens may be listed:
+
+1. **No transfer callbacks.** A token with a pre-transfer hook (ERC-777 style) could reenter `buyCollateral` while its balance is momentarily stale and read too large an inventory. The `nonReentrant` guard closes the direct reentrancy path; the listing restriction closes the residual stale-balance surface. This is the same caveat and mitigation Comet documents for its own derived reserves.
+
+2. **`totalsCollateral` must never overstate the physical balance.** Every protocol path preserves `balanceOf(market) >= totalsCollateral`, so the derivation's checked subtraction never underflows. Two token behaviors break that:
+   - **Balance that falls outside a protocol call** (a rebasing-down LST after a slashing event): `balanceOf` drops below `totalsCollateral` with no protocol action.
+   - **Fee-on-transfer**: `_supplyCollateral` credits the requested `amount` to `totalsCollateral` but the token delivers less, so the total overstates the balance from the first deposit.
+
+   In both cases `getCollateralReserves` reverts. The failure mode is **availability, not solvency**: `buyCollateral` becomes unusable for that asset because the checked math reverts rather than corrupting any accounting, and user claims (`totalsCollateral`, `userCollateral`) stay intact and withdrawable. Such tokens must not be listed.
+
+Only plain ERC-20 collateral satisfying both is listable. The reference set (WETH, wBTC) does.
+
 ---
 
 ## 2. System Invariants
@@ -83,10 +97,10 @@ INV-1 is exact, index-free, and integer: it is the anchor every other accounting
 ### Collateral invariants
 
 ```
-INV-6: for every collateral asset:
-    token.balanceOf(market) >= totalsCollateral[asset]              (donations only add)
-    totalsCollateral[asset] == sum of userCollateral[*][asset]
-                               + protocol-held inventory (absorbed, unsold)
+INV-6: for every collateral asset (see Guide 3, ADR-7):
+    totalsCollateral[asset] == sum of userCollateral[*][asset]      (exact, by construction)
+    token.balanceOf(market)  >= totalsCollateral[asset]             (gap = seized inventory
+                                                                     + donations; O(1) solvency)
 
 INV-7: userCollateral[a][i] > 0  <=>  assetsIn bit i of account a is set
 
@@ -240,7 +254,7 @@ Scenario playbook:
 
 - [ ] INV-13 coverage condition enforced in the constructor
 - [ ] Absorb settlement handles surplus, exact, and shortfall cases; bad debt emitted
-- [ ] `buyCollateral` cannot sell user-owned collateral (inventory = `totalsCollateral - sum(userCollateral)` accounting verified)
+- [ ] `buyCollateral` cannot sell user-owned collateral (guard is `quote <= getCollateralReserves = balanceOf(market) - totalsCollateral`, ADR-7)
 - [ ] Storefront discount bounded by the liquidation penalty for every parameter combination
 - [ ] `withdrawReserves` bounded by both `getReserves()` and cash
 

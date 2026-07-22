@@ -335,6 +335,17 @@ interface ILendingMarket {
     function getReserves() external view returns (int256);
 
     /**
+     * @notice Seized collateral inventory available for sale through buyCollateral.
+     * @dev Derived as token.balanceOf(market) - totalsCollateral[asset]. With totalsCollateral
+     *      meaning the sum of user claims, the difference is exactly the collateral the protocol
+     *      owns after an absorb, plus any donations. buyCollateral can never sell below this into
+     *      user-owned collateral.
+     * @param asset Collateral asset to query.
+     * @return Seized inventory in the asset's native decimals.
+     */
+    function getCollateralReserves(address asset) external view returns (uint256);
+
+    /**
      * @notice Whether an account's debt is within its borrowing capacity.
      * @dev Collateral valued at price - conf, debt at price + conf.
      * @param account Account to query.

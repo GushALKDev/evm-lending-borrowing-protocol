@@ -26,11 +26,11 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 3         | Supply & Withdraw                      | 8      | 8         | 100%     |
 | 4         | Borrow & Repay                         | 7      | 7         | 100%     |
 | 5         | Oracle (Pyth + Chainlink)              | 10     | 10        | 100%     |
-| 6         | Absorb Liquidation                     | 8      | 0         | 0%       |
+| 6         | Absorb Liquidation                     | 8      | 8         | 100%     |
 | 7         | Reserves & Protocol Management         | 6      | 0         | 0%       |
 | 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 0         | 0%       |
 | 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **45**    | **59%**  |
+| **TOTAL** |                                        | **76** | **53**    | **70%**  |
 
 ---
 
@@ -266,14 +266,42 @@ Each phase should be completed before moving to the next. Within each phase, the
 >
 > **Dependencies:** Phase 5
 
-- [ ] **6.1** `isLiquidatable()`: per-asset `liquidateCollateralFactor`, collateral valued at `price + conf` (borrower-favorable)
-- [ ] **6.2** `absorb(account, priceUpdate)`: seize all collateral, credit value at `liquidationFactor`, wipe debt through the single accounting path
-- [ ] **6.3** Shortfall path: remaining debt zeroed against reserves (explicit bad debt, `getReserves()` may go negative)
-- [ ] **6.4** Surplus path: excess seize value credited to the absorbed account as base supply
-- [ ] **6.5** `quoteCollateral()`: `discount = storeFrontPriceFactor * (1 - liquidationFactor)`, ask price below oracle price
-- [ ] **6.6** `buyCollateral()`: gated by `getReserves() < targetReserves`, `minAmount` slippage guard, CEI ordering (base in before collateral out)
-- [ ] **6.7** Pause flags (`ABSORB`, `BUY`)
-- [ ] **6.8** Tests: surplus/exact/shortfall absorptions, discount round trip never reduces reserves at stable prices, multi-collateral absorb, fuzz on seize math
+- [x] **6.1** `isLiquidatable()`: per-asset `liquidateCollateralFactor`, collateral valued at `price + conf` (borrower-favorable)
+- [x] **6.2** `absorb(account, priceUpdate)`: seize all collateral, credit value at `liquidationFactor`, wipe debt through the single accounting path
+- [x] **6.3** Shortfall path: remaining debt zeroed against reserves (explicit bad debt, `getReserves()` may go negative)
+- [x] **6.4** Surplus path: excess seize value credited to the absorbed account as base supply
+- [x] **6.5** `quoteCollateral()`: `discount = storeFrontPriceFactor * (1 - liquidationFactor)`, ask price below oracle price
+- [x] **6.6** `buyCollateral()`: gated by `getReserves() < targetReserves`, `minAmount` slippage guard, CEI ordering (base in before collateral out)
+- [x] **6.7** Pause flags (`ABSORB`, `BUY`)
+- [x] **6.8** Tests: surplus/exact/shortfall absorptions, discount round trip never reduces reserves at stable prices, multi-collateral absorb, fuzz on seize math
+
+> **Implemented in `LendingMarket` (not the harness):** the four functions (`absorb`, `buyCollateral`,
+> `quoteCollateral`, `isLiquidatable`) move from reverting harness stubs into the production contract.
+> Only `withdrawReserves` remains a stub, filled in Phase 7. `isLiquidatable` reuses the capacity
+> shape of `_borrowCapacity` in a twin `_liquidationCapacity` that values collateral at the *high*
+> edge (`price + conf`, floored) with `liquidateCF`, and debt at the high edge ceiled: the
+> borrower-favorable direction, so no absorb on a noisy tick.
+>
+> **6.2-6.4 settlement:** `absorb` pushes prices, requires eligibility, then `_seizeCollateral`
+> zeroes each held balance, decrements `totalsCollateral` by the same amount, and clears its
+> `assetsIn` bit; the seized inventory then lives in `balanceOf(market) - totalsCollateral` ([Guide 3,
+> ADR-7](./03-architecture.md#adr-7-collateral-total-as-user-claims-vs-whole-pool)). Seize value is
+> marked at the mid price, credit at
+> `liquidationFactor`. Settlement routes through the single accounting path: `newBalance = -debtPV +
+> creditBase`, clamped at zero, with `badDebt = debtPV - creditBase` on a shortfall. Surplus is
+> credited as base supply; a shortfall zeroes the account and reserves fall by the full debt.
+>
+> **6.6 buyCollateral moves only cash:** base in raises reserves through the derived formula (no
+> principal change, no supplier credited); collateral out moves only the physical balance and touches
+> no total. Gated on `getReserves() < TARGET_RESERVES`, with the `minAmount` slippage guard and an
+> inventory check against `getCollateralReserves` (seized inventory only, ADR-7). A
+> new `_pushBuyPrices` pushes base + the one asset, since buyCollateral has no account to drive the
+> `assetsIn`-based `_pushPrices`. `receive()` (added Phase 5) lets the per-asset fee refund land.
+>
+> **6.8 round-trip fuzz shape:** the reserve-non-negativity claim of Guide 2 Section 9 holds *only*
+> in the surplus/exact case; in the shortfall case proceeds reach the credit but not the full debt,
+> the gap being the already-recognized bad debt. The fuzz asserts the unified true property, proceeds
+> `>= creditBase`, plus the exact per-buy identity `dReserves == baseAmount`.
 
 **Deliverables:**
 
@@ -357,6 +385,8 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-22 | Changed the collateral-total semantics to match Comet ([Guide 3, ADR-7](./03-architecture.md#adr-7-collateral-total-as-user-claims-vs-whole-pool)). `totalsCollateral` now means the sum of user claims only: `absorb` decrements it in step with each seized balance, and the protocol's seized inventory is derived from the physical balance through a new `getCollateralReserves(asset) = balanceOf(market) - totalsCollateral`. `buyCollateral` gates on that derived inventory instead of the raw total and no longer writes any total, so it can never sell user-owned collateral. This turns the solvency property from a fragile, O(n)-only inequality (`totalsCollateral >= Σ userCollateral`, unenforced by the old guard) into an exact equality by construction plus an O(1) on-chain-assertable `balanceOf >= totalsCollateral`. The supply cap changed meaning with it: it now bounds the sum of user claims only, not the protocol's total physical holdings, so seized inventory no longer consumes cap room (after a large absorb the market can custody above the cap). Accepted trade-off: deriving inventory from `balanceOf` restricts listing to tokens whose `balanceOf` never falls below `totalsCollateral` outside a protocol call, which excludes transfer-hook, rebasing-down, and fee-on-transfer collateral; the failure mode for such a token would be availability (`buyCollateral` reverts), not a solvency corruption (documented in Guide 6). 3 new unit tests, including the regression pin that a buy exceeding the seized inventory reverts even when it fits the old raw total; INV-6 rewritten. 224 total green |
+| 2026-07-22 | Phase 6 complete: the two-step Comet liquidation, moved from harness stubs into `LendingMarket`. `isLiquidatable` values collateral at the high confidence edge with `liquidateCF` (a `_liquidationCapacity` twin of `_borrowCapacity`), so no absorb on a noisy tick. `absorb` pushes prices, requires eligibility, seizes every held collateral into protocol ownership (`totalsCollateral` untouched), and settles through the single accounting path: `newBalance = -debtPV + creditBase` clamped at zero, surplus credited as base supply, shortfall zeroing the account with `badDebt = debtPV - creditBase` recognized against reserves immediately (`getReserves()` may go negative). Seize marked at mid price, credit at `liquidationFactor`. `quoteCollateral` applies `discount = storeFront * (1 - LF)` floored and an ask below the oracle price, both roundings protocol-favorable. `buyCollateral` moves only cash (base in raises reserves via the derived formula, no principal change), gated on `getReserves() < TARGET_RESERVES` with a `minAmount` slippage guard, inventory check, and CEI ordering; a new `_pushBuyPrices` pushes base + the one asset. `ABSORB`/`BUY` pause flags wired. Only `withdrawReserves` remains a harness stub (Phase 7). 19 new tests (17 unit, 2 fuzz); the round-trip fuzz asserts proceeds `>= creditBase` (the shortfall gap is the already-recognized bad debt) and the exact per-buy `dReserves == baseAmount`. 99.70% line coverage on the market; 221 total green |
 | 2026-07-22 | Phase 5 complete: `PythChainlinkOracle.sol`, the real price infrastructure behind the frozen `IPriceOracle` shape. Pyth pull oracle as the primary source (caller-funded `updatePriceFeeds` fee via `msg.value`, surplus refunded), Chainlink as a deviation anchor only (never a fallback). The four-stage validation pipeline lives in one internal `_validate` shared by `updateAndGetPrice` and `getPrice` so a view can never disagree with the transactional check: non-zero, staleness (`MAX_STALENESS`, applied via `getPriceUnsafe` so lending's looser policy governs both paths), confidence (`conf/price <= MAX_CONFIDENCE_BPS`), and Chainlink deviation (`\|pyth-anchor\|/anchor <= MAX_DEVIATION_BPS`) with the anchor's own per-feed heartbeat. Prices normalize to 1e18 from Pyth `expo` and from the Chainlink feed's `decimals()`. Pure policy: immutable feed config, no owner, no setters. Reference params `MAX_STALENESS=60`, `MAX_CONFIDENCE_BPS=200`, `MAX_DEVIATION_BPS=300`. Added the Pyth SDK submodule (`@pythnetwork/pyth-sdk-solidity`), a minimal local `IChainlinkAggregator`, and `MockChainlinkFeed`; tests use the SDK's `MockPyth`. Found and fixed a latent Phase 4 bug the mock hid: the market forwards its whole ETH balance per asset and the real oracle refunds the surplus back to it, but the market had no `receive()` — added it. 33 new tests (28 unit, 3 fuzz, 2 integration), 98.46% line / 95.45% branch coverage on the oracle; 202 total green |
 | 2026-07-22 | Phase 4 complete: the negative-principal paths. `withdraw(base)` past zero opens or increases a borrow through the same accounting path (no `borrow()` function, no branch on the sign crossing), `supply(base)` repays and crosses back with the `type(uint256).max` full-repay sentinel. Real capacity math replaces the `NotImplementedYet` hook: collateral at `price - conf` floored, debt at `price + conf` ceiled, summed per asset over the `assetsIn` bitmap. `_requireBorrowCollateralized` splits into a transactional `_pushPrices` plus the `view` `_borrowCapacity` that the public `isBorrowCollateralized` shares, so the view can never disagree with the check gating the borrow. `minBorrow` enforced against the resulting debt, not the borrowed amount, so it also catches a repay stranding a position in the dust band while leaving repay-to-zero reachable. Item 4.6 closed without an event change: the Phase 1 interface already defines `Supply`/`Withdraw` as covering both branches and the interface wins over the roadmap wording. `InsufficientBalance` is now unreachable on the base path. 43 new tests (37 unit, 6 fuzz), 99.61% line coverage on the market; 169 total green. INV-9 and INV-10 asserted at the single-account level |
 | 2026-07-21 | Added the [testing documentation section](./tests/README.md): strategy and principles, a test-by-test inventory of all 126 tests with line-anchored links to the code, the invariant coverage map (which test asserts each of INV-1 to INV-14, and which are still unasserted), the mutation-check record including the flipped `presentValueSupply` that round trips failed to catch, and the per-phase testing deliverables. Updated at the close of every phase from here on |

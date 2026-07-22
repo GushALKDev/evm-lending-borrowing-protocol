@@ -199,7 +199,7 @@ struct CollateralConfig {
     uint8 decimals;                    //  1 byte  ─┘
 }
 
-mapping(address => uint128) public totalsCollateral; // asset => total supplied
+mapping(address => uint128) public totalsCollateral; // asset => sum of user claims (see ADR-7)
 ```
 
 All factors are in basis points (10,000 = 100%). Constructor enforces the ordering that the liquidation math relies on (see [Guide 2](./02-mathematics.md)):
@@ -448,7 +448,7 @@ sequenceDiagram
     Oracle-->>Market: validated prices
     Market->>Market: Check: isLiquidatable(account) at price + conf
 
-    Note over Market: EFFECTS (per collateral asset held)<br/>seize full userCollateral balance<br/>creditValue += amount * price * liquidationFactor<br/>userCollateral = 0, clear assetsIn bit<br/>(totalsCollateral unchanged: protocol now owns it)
+    Note over Market: EFFECTS (per collateral asset held)<br/>seize full userCollateral balance<br/>creditValue += amount * price * liquidationFactor<br/>userCollateral = 0, totalsCollateral -= amount, clear assetsIn bit<br/>(seized inventory now lives in balanceOf - totalsCollateral, see ADR-7)
 
     Note over Market: SETTLEMENT<br/>newBalance = -debtPV + creditValue / basePrice<br/>if newBalance < 0: newBalance = 0 (shortfall is bad debt,<br/>reserves absorb it, getReserves() may go negative)<br/>principal = principalValue(newBalance)<br/>totalBorrowBase -= old debt principal<br/>totalSupplyBase += new supply principal (if surplus)
 
@@ -478,7 +478,7 @@ sequenceDiagram
     Market->>Market: accrue()
     Market->>Market: Checks: buy not paused,<br/>getReserves() < targetReserves (only sell when reserves are needed)
     Market->>Market: quote = quoteCollateral(WETH, baseAmount)
-    Market->>Market: Check: quote >= minAmount (slippage guard)
+    Market->>Market: Check: quote >= minAmount (slippage guard)<br/>Check: quote <= getCollateralReserves(WETH) (seized inventory only, ADR-7)
     Note over Market: discount = storeFrontPriceFactor * (1 - liquidationFactor)<br/>askPrice = price * (1 - discount)<br/>quote = baseAmount * basePrice / askPrice
     Market->>USDC: transferFrom(buyer, market, baseAmount)
     Market->>WETH: transfer(recipient, quote)
@@ -596,6 +596,29 @@ Five independent pause bits (`SUPPLY`, `TRANSFER`, `WITHDRAW`, `ABSORB`, `BUY`) 
 **Context.** The alternatives were two unsigned principals per account (V2-style, needs an explicit rule forbidding simultaneous base supply and borrow) and a non-tokenized position (simpler, but less faithful to Comet and less composable).
 
 **Decision.** Signed principal makes supplying and borrowing base mutually exclusive by construction, unifies repay and supply into one code path (Section 7.4), and keeps the solvency accounting over exactly two totals. Full Comet tokenization is retained: `transfer` moves principal between accounts, with the restriction that a sender's principal can never be pushed negative, so transfers need no oracle price and cannot create debt.
+
+### ADR-7: Collateral Total as User Claims vs Whole Pool
+
+> **Date:** 2026-07-22
+> **Status:** Accepted (supersedes the original design)
+> **Decision:** `totalsCollateral[asset]` means the sum of user claims only; the protocol's seized inventory is derived from the physical balance as `getCollateralReserves = token.balanceOf(market) - totalsCollateral`. `absorb` decrements the total when it seizes; `buyCollateral` gates on the derived inventory and touches no total.
+
+**Context.** In the original design, `totalsCollateral` counted the whole custodied pool. `absorb` seized a borrower's collateral by zeroing the user balance while leaving `totalsCollateral` untouched, so the protocol's seized inventory was the implicit gap `totalsCollateral - sum(userCollateral)`, and `buyCollateral` gated directly on the raw total.
+
+**Design 1 (original): total as the whole pool, inventory implicit in the gap.** It was a reasonable starting point. It saves one `SSTORE` per asset in `absorb` (the total is not written), avoids an external `balanceOf` call on the `buyCollateral` hot path, and its guard still prevented selling tokens the contract does not physically hold (`quote <= totalsCollateral <= balanceOf`). What it did not do was prevent selling tokens that were physically present but still owed to users.
+
+**Why it changed.** The solvency property degenerated into an inequality, `totalsCollateral >= sum(userCollateral)`, that cannot be checked on-chain because summing user balances is O(n). `buyCollateral` did not enforce it locally: its guard was `quote <= totalsCollateral`, not `quote <= (totalsCollateral - sum(userCollateral))`. Selling only the seized surplus relied on a non-local argument about when `buyCollateral` is enabled (a reserve deficit, which normally coincides with seized inventory existing) rather than on the guard itself. The failure mode is an underflow in a later `withdrawCollateral` (`totalsCollateral -= amount`), i.e. loss of funds for the marginal withdrawing user. Severity: **impact HIGH, likelihood LOW**, because the deficit stays hidden inside the positions of users who have not yet withdrawn, and exposing it needs a withdrawal pattern on top of a broken invariant.
+
+**Design 2 (adopted): total as user claims, inventory derived from the physical balance.** Every write moves `totalsCollateral` and the touching user balance by the same amount, including `absorb`, so `totalsCollateral == sum(userCollateral)` becomes an exact equality by construction rather than a fragile inequality. `buyCollateral`'s guard becomes local and exact: `quote <= getCollateralReserves`, which is `balanceOf(market) - totalsCollateral`, exactly the seized inventory. Solvency (`balanceOf(market) >= totalsCollateral`) becomes assertable on-chain in O(1) instead of only fuzzable. This is Comet's own model (`getCollateralReserves`, `CometWithExtendedAssetList.sol`).
+
+**Supply cap semantics changed with it.** The cap is checked against `totalsCollateral`, so under Design 2 it bounds the *sum of user claims* for an asset, not the protocol's total physical exposure to it. After a large absorb the market can custody well above the cap (the seized inventory sits outside the total until sold): a 1,000-unit cap can hold 1,000 units of live claims plus any seized inventory on top. This is deliberate and matches Comet: the cap governs how much fresh collateral users may post, and seized inventory is transient stock the storefront is actively draining, not new risk to gate. The accepted consequence is that the cap no longer bounds worst-case physical holdings of a collateral; that bound comes from liquidation dynamics, not the cap.
+
+**Options rejected.**
+
+- **Explicit stored counter for seized inventory.** Equally exact and avoids the external `balanceOf` call. Rejected for diverging from Comet, whose derived-from-balance model is the reference this protocol follows, and for adding a second counter that could itself drift.
+- **Keep Design 1, cover the property with an invariant test only.** Rejected because the on-chain guard stays non-local: a fuzz test raises confidence but does not make `buyCollateral` itself refuse to sell user collateral.
+
+**Consequences (accepted trade-off).** Deriving inventory from `balanceOf` means a collateral token with a pre-transfer hook (ERC-777 style) could reenter `buyCollateral` while the balance is momentarily stale. Comet documents this same caveat in a code comment and mitigates it by not listing such assets. It is recorded as an asset-listing restriction in [Guide 6](./06-security.md#asset-listing-restrictions), alongside the rule against tokens whose balance can fall outside a protocol call: only plain ERC-20 collateral with no transfer callbacks may be listed. The `nonReentrant` guard on `buyCollateral` already closes the direct reentrancy path; the listing restriction closes the residual stale-balance surface.
 
 **Consequences.** Rounding analysis must treat the sign-crossing cases explicitly (done in [Guide 2](./02-mathematics.md)). As a rebasing token, `lmUSDC` will not behave in naive integrations (AMM pools, vaults that cache balances); this is inherent to interest-bearing balances and is flagged in [Guide 4](./04-tradeoffs.md).
 

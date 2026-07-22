@@ -328,7 +328,7 @@ dReserves(absorb) = -max( debtPV, creditBase )
 | Exact                         | `creditBase == debtPV`  | `debtPV`         | 0                            | 0               |
 | Shortfall                     | `creditBase < debtPV`   | `debtPV`         | 0                            | `debtPV - creditBase` |
 
-In exchange, the protocol now owns collateral worth `seizeValueUSD = creditValueUSD / liquidationFactor > creditValueUSD` at mark, to be recovered through `buyCollateral` (Section 9).
+In exchange, the protocol now owns collateral worth `seizeValueUSD = creditValueUSD / liquidationFactor > creditValueUSD` at mark, to be recovered through `buyCollateral` (Section 9). Seizure decrements `totalsCollateral` in step with the zeroed user balance, so the seized inventory is `token.balanceOf(market) - totalsCollateral`, exactly what `buyCollateral` may sell ([Guide 3, ADR-7](./03-architecture.md#adr-7-collateral-total-as-user-claims-vs-whole-pool)).
 
 ### Coverage at the eligibility boundary (confidence-band interaction)
 

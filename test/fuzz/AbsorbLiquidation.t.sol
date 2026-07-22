@@ -122,7 +122,7 @@ contract AbsorbLiquidationFuzzTest is Test {
         // inverse), leaving at most a sub-unit of collateral unsold.
         uint256 discount = uint256(5000) * (10000 - 9300) / 10000; // storeFront * (1 - LF), bps
         uint256 askPrice = price * (10000 - discount) / 10000; // 1e18 scale
-        uint128 inventory = market.totalsCollateral(address(weth));
+        uint256 inventory = market.getCollateralReserves(address(weth));
         uint256 baseForAll = FixedPointMathLib.fullMulDiv(inventory, askPrice, 1e30); // 6-dec base, floor
 
         vm.prank(carol);
@@ -131,7 +131,7 @@ contract AbsorbLiquidationFuzzTest is Test {
         // A buy moves only cash, so reserves rise by exactly the base paid in.
         assertEq(market.getReserves() - reservesAfterAbsorb, int256(baseForAll), "reserves rise by base paid");
         // Proceeds plus the tiny unsold remainder always cover the credit the absorb spent.
-        uint256 residualValueBase = uint256(market.totalsCollateral(address(weth))) * price / 1e18 / 1e12;
+        uint256 residualValueBase = market.getCollateralReserves(address(weth)) * price / 1e18 / 1e12;
         assertGe(baseForAll + residualValueBase + 1, creditBase, "proceeds cover the absorb credit");
     }
 }

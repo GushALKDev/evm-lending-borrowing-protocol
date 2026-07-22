@@ -138,8 +138,10 @@ contract AbsorbLiquidationTest is Test {
 
         // Surplus credited as base supply: 16,368 - 15,000 = 1,368.
         assertEq(market.balanceOf(alice), 1_368e6, "surplus credited as supply");
-        // Protocol still holds the inventory.
-        assertEq(market.totalsCollateral(address(weth)), 10e18, "inventory retained by protocol");
+        // The seized claim leaves the total; the inventory is now derived from the physical balance.
+        assertEq(market.totalsCollateral(address(weth)), 0, "user claim removed from total");
+        assertEq(market.getCollateralReserves(address(weth)), 10e18, "seized inventory held by protocol");
+        assertEq(weth.balanceOf(address(market)), 10e18, "tokens still custodied");
         // Reserves fell by the credit (16,368).
         assertEq(reservesBefore - market.getReserves(), 16_368e6, "reserves fall by credit");
     }
@@ -264,7 +266,7 @@ contract AbsorbLiquidationTest is Test {
         market.buyCollateral(address(weth), 10e18, 19_300e6, carol, new bytes[](0));
 
         assertEq(weth.balanceOf(carol) - wethBefore, 10e18, "buyer receives discounted collateral");
-        assertEq(market.totalsCollateral(address(weth)), 0, "inventory drained");
+        assertEq(market.getCollateralReserves(address(weth)), 0, "seized inventory drained");
     }
 
     function test_buyCollateral_revertsWhenReservesAtTarget() public {
@@ -303,9 +305,12 @@ contract AbsorbLiquidationTest is Test {
         market.absorb(alice, new bytes[](0));
         _setWethPrice(2_000e18);
 
-        // Ask for more collateral than the 10 WETH of inventory.
+        // Ask for more collateral than the 10 WETH of seized inventory.
+        uint256 quote = market.quoteCollateral(address(weth), 100_000e6);
         vm.prank(carol);
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(ILendingMarket.InsufficientInventory.selector, address(weth), quote, 10e18)
+        );
         market.buyCollateral(address(weth), 0, 100_000e6, carol, new bytes[](0));
     }
 
@@ -330,7 +335,7 @@ contract AbsorbLiquidationTest is Test {
         vm.prank(carol);
         market.buyCollateral(address(weth), 10e18, 16_984e6, carol, new bytes[](0));
 
-        assertEq(market.totalsCollateral(address(weth)), 0, "all inventory sold");
+        assertEq(market.getCollateralReserves(address(weth)), 0, "all seized inventory sold");
         assertGe(market.getReserves(), reservesBeforeAbsorb, "round trip never reduces reserves");
     }
 
@@ -357,5 +362,107 @@ contract AbsorbLiquidationTest is Test {
         vm.prank(carol);
         vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BUY));
         market.buyCollateral(address(weth), 0, 1_000e6, carol, new bytes[](0));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                 COLLATERAL RESERVES SEMANTICS (ADR-7)
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Regression pin for ADR-7. With a live user claim sitting next to seized inventory, a buy
+    ///      whose quote exceeds the seized inventory reverts even though it would fit inside the raw
+    ///      total under the old pool-wide semantics. This is the exact case that could have sold
+    ///      user-owned collateral.
+    function test_buyCollateral_cannotSellUserOwnedCollateral() public {
+        // Bob posts 10 WETH as a live claim that must never be sellable through buyCollateral.
+        weth.mint(bob, 10e18);
+        vm.startPrank(bob);
+        weth.approve(address(market), type(uint256).max);
+        market.supply(address(weth), 10e18);
+        vm.stopPrank();
+
+        // Alice is absorbed: her 10 WETH become seized inventory, her claim leaves the total.
+        _openPosition(15_000e6);
+        _setWethPrice(1_760e18);
+        vm.prank(carol);
+        market.absorb(alice, new bytes[](0));
+        _setWethPrice(2_000e18);
+
+        // Total is bob's live claim (10 WETH); seized inventory is also 10 WETH; balance is 20 WETH.
+        assertEq(market.totalsCollateral(address(weth)), 10e18, "total is the live user claim only");
+        assertEq(market.getCollateralReserves(address(weth)), 10e18, "seized inventory only");
+        assertEq(weth.balanceOf(address(market)), 20e18, "physical balance holds both");
+
+        // Buying 11 WETH fits the old 20 WETH raw total but exceeds the 10 WETH seized inventory.
+        uint256 quote11 = market.quoteCollateral(address(weth), 21_230e6);
+        assertGt(quote11, 10e18, "quote exceeds seized inventory");
+        assertLe(quote11, 20e18, "but would fit the old raw total");
+        vm.prank(carol);
+        vm.expectRevert(
+            abi.encodeWithSelector(ILendingMarket.InsufficientInventory.selector, address(weth), quote11, 10e18)
+        );
+        market.buyCollateral(address(weth), 0, 21_230e6, carol, new bytes[](0));
+
+        // Buying exactly the seized inventory succeeds, and bob can still withdraw his full claim.
+        vm.prank(carol);
+        market.buyCollateral(address(weth), 10e18, 19_300e6, carol, new bytes[](0));
+        assertEq(market.getCollateralReserves(address(weth)), 0, "seized inventory drained");
+
+        vm.prank(bob);
+        market.withdraw(address(weth), 10e18, new bytes[](0));
+        assertEq(weth.balanceOf(bob), 10e18, "user claim fully recoverable");
+    }
+
+    /// @dev The supply cap bounds user claims only. Seized inventory does not consume cap room, so a
+    ///      cap-filling deposit is accepted after an absorb that would have blocked it under the old
+    ///      semantics where seized inventory still counted against the cap.
+    function test_supplyCap_countsUserClaimsNotSeizedInventory() public {
+        // Alice fills nearly all of the 1,000 WETH cap, then borrows and is absorbed.
+        weth.mint(alice, 900e18); // top up beyond the 100 WETH minted in setUp
+        vm.prank(alice);
+        market.supply(address(weth), 990e18);
+        vm.prank(alice);
+        market.withdraw(address(base), 15_000e6, new bytes[](0));
+        _setWethPrice(15e18); // 990 WETH * 15 * 0.85 = 12,622 capacity < 15,000 debt: liquidatable
+        vm.prank(carol);
+        market.absorb(alice, new bytes[](0));
+
+        // Absorb removed alice's 990 WETH claim from the total; the cap is free again.
+        assertEq(market.totalsCollateral(address(weth)), 0, "user claims cleared from total");
+        assertEq(market.getCollateralReserves(address(weth)), 990e18, "990 WETH now seized inventory");
+
+        // A fresh 1,000 WETH deposit fits the cap even though 990 WETH of seized inventory is custodied.
+        weth.mint(bob, 1_000e18);
+        vm.startPrank(bob);
+        weth.approve(address(market), type(uint256).max);
+        market.supply(address(weth), 1_000e18);
+        vm.stopPrank();
+        assertEq(market.totalsCollateral(address(weth)), 1_000e18, "cap counts user claims only");
+    }
+
+    /// @dev The full absorb, buyCollateral, withdrawCollateral sequence: the path that was unsafe
+    ///      under the old semantics now settles with the withdrawing user's claim intact throughout.
+    function test_absorbBuyWithdraw_sequenceKeepsUserWhole() public {
+        weth.mint(bob, 10e18);
+        vm.startPrank(bob);
+        weth.approve(address(market), type(uint256).max);
+        market.supply(address(weth), 10e18);
+        vm.stopPrank();
+
+        _openPosition(15_000e6);
+        _setWethPrice(1_760e18);
+        vm.prank(carol);
+        market.absorb(alice, new bytes[](0));
+        _setWethPrice(2_000e18);
+
+        // Drain the seized inventory only.
+        vm.prank(carol);
+        market.buyCollateral(address(weth), 10e18, 19_300e6, carol, new bytes[](0));
+        assertEq(market.getCollateralReserves(address(weth)), 0, "seized inventory sold");
+
+        // Bob withdraws his untouched 10 WETH; the total returns to zero.
+        vm.prank(bob);
+        market.withdraw(address(weth), 10e18, new bytes[](0));
+        assertEq(weth.balanceOf(bob), 10e18, "user claim recovered in full");
+        assertEq(market.totalsCollateral(address(weth)), 0, "total back to zero");
     }
 }

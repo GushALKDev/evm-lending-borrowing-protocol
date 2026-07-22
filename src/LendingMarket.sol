@@ -402,6 +402,16 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
     }
 
     /// @inheritdoc ILendingMarket
+    function getCollateralReserves(address asset) public view returns (uint256) {
+        // Derived like base reserves: the seized inventory is the physical balance beyond the sum of
+        // user claims. Every protocol path preserves balanceOf >= totalsCollateral, so the checked
+        // subtraction never underflows for a well-behaved token. An asset whose balance can fall
+        // outside a protocol call (a rebasing-down LST after slashing) can break that and revert here,
+        // disabling buyCollateral for it: such assets must not be listed (Guide 6, asset listing).
+        return IERC20(asset).balanceOf(address(this)) - totalsCollateral[asset];
+    }
+
+    /// @inheritdoc ILendingMarket
     function userCollateral(address account, address asset) external view returns (uint128) {
         return userCollateralBalance[account][asset];
     }
@@ -597,7 +607,8 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
         if (debtUSD <= liqCapacityUSD) revert NotLiquidatable(account, debtUSD, liqCapacityUSD);
 
         // EFFECTS: seize every held collateral into protocol ownership, accumulating the mid-price
-        // credit at the liquidation factor. totalsCollateral is untouched: the protocol now owns it.
+        // credit at the liquidation factor. totalsCollateral drops with each user balance; the seized
+        // inventory now lives in the gap between the physical balance and the total.
         uint256 creditValueUSD = _seizeCollateral(account);
 
         (uint256 basePrice,) = ORACLE.getPrice(BASE_TOKEN);
@@ -621,9 +632,11 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
 
     /**
      * @notice Seizes every collateral the account holds into protocol ownership.
-     * @dev Zeroes each userCollateral balance and clears the assetsIn bit, but leaves totalsCollateral
-     *      unchanged: the inventory is now the protocol's, to be recovered through buyCollateral.
-     *      Seize value is marked at the mid price; the credit applies the per-asset liquidationFactor.
+     * @dev Zeroes each user balance and clears the assetsIn bit, and decrements totalsCollateral by
+     *      the same amount: totalsCollateral tracks the sum of user claims only, so the seized
+     *      inventory leaves that total and becomes derivable from the physical balance through
+     *      getCollateralReserves. Seize value is marked at the mid price; the credit applies the
+     *      per-asset liquidationFactor.
      * @param account Account being absorbed.
      * @return creditValueUSD Sum of seized value times liquidationFactor, USD at 1e18 scale, floored.
      */
@@ -644,6 +657,7 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
             );
 
             userCollateralBalance[account][asset] = 0;
+            totalsCollateral[asset] -= amount;
             _clearAssetIn(account, asset);
 
             emit AbsorbCollateral(msg.sender, account, asset, amount, seizeValueUSD);
@@ -673,11 +687,11 @@ abstract contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard
         uint256 quote = quoteCollateral(asset, baseAmount);
         if (quote < minAmount) revert TooMuchSlippage(quote, minAmount);
 
-        uint128 inventory = totalsCollateral[asset];
+        uint256 inventory = getCollateralReserves(asset);
         if (quote > inventory) revert InsufficientInventory(asset, quote, inventory);
 
-        // EFFECTS: the inventory leaves protocol ownership.
-        totalsCollateral[asset] = inventory - uint128(quote);
+        // EFFECTS: none on totalsCollateral. The sale moves only the physical balance below; the
+        // seized inventory it draws from is not part of any user's claim, so no total changes.
 
         // INTERACTIONS (CEI: base in before collateral out). The base raises cash, hence reserves,
         // through the derived formula; no principal changes, so no supplier is credited.

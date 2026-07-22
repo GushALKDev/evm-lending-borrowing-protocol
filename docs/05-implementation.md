@@ -168,7 +168,7 @@ Plus the standard ERC-20 surface (`transfer`, `transferFrom`, `approve`, `allowa
 | Contract        | Statement                                                                                          |
 | :--------------- | :--------------------------------------------------------------------------------------------------- |
 | Preconditions   | `PAUSE_ABSORB` clear; `isLiquidatable(account)` at `price + conf` after accrual                     |
-| Effects         | All of `account`'s collateral moves to protocol ownership (`userCollateral` zeroed, `totalsCollateral` unchanged); debt wiped; credit at `liquidationFactor` and mid price per [Guide 2, Section 8](./02-mathematics.md#8-liquidation-math-absorb); shortfall recognized as bad debt |
+| Effects         | All of `account`'s collateral moves to protocol ownership (`userCollateral` zeroed, `totalsCollateral` decremented in step, seized inventory now in `balanceOf - totalsCollateral`, ADR-7); debt wiped; credit at `liquidationFactor` and mid price per [Guide 2, Section 8](./02-mathematics.md#8-liquidation-math-absorb); shortfall recognized as bad debt |
 | Postconditions  | `principal(account) >= 0`; `assetsIn == 0`; `getReserves()` decreased by `max(debtPV, creditBase)`; no token transfers occur |
 | Oracle          | Transactional, all assets in `assetsIn` plus base                                                   |
 
@@ -176,8 +176,8 @@ Plus the standard ERC-20 surface (`transfer`, `transferFrom`, `approve`, `allowa
 
 | Contract        | Statement                                                                                          |
 | :--------------- | :--------------------------------------------------------------------------------------------------- |
-| Preconditions   | `PAUSE_BUY` clear; `getReserves() < targetReserves`; protocol-held inventory (`totalsCollateral - sum of userCollateral`) `>= quote`; `quote >= minAmount` |
-| Effects         | Accrues; `totalsCollateral` decreases by `quote`                                                    |
+| Preconditions   | `PAUSE_BUY` clear; `getReserves() < targetReserves`; `getCollateralReserves(asset)` (= `balanceOf(market) - totalsCollateral`) `>= quote`; `quote >= minAmount` |
+| Effects         | Accrues; moves only the physical collateral balance, no total changes (ADR-7)                       |
 | Postconditions  | Base pulled before collateral sent (CEI); `getReserves()` increased by `baseAmount`                 |
 | Oracle          | Transactional (asset + base)                                                                        |
 
