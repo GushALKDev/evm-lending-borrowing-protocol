@@ -918,6 +918,14 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         uint256 fromBalance = balanceOf(from);
         if (amount > fromBalance) revert TransferWouldBorrow(from, fromBalance, amount);
 
+        // A self-transfer is a no-op: with from == to the two updates below read the same stale
+        // principal and the second write clobbers the first, minting `amount` out of thin air. Return
+        // after the checks above so it still validates the balance and emits, but touches no state.
+        if (from == to) {
+            emit Transfer(from, to, amount);
+            return;
+        }
+
         int104 fromOld = userBasic[from].principal;
         int104 toOld = userBasic[to].principal;
 

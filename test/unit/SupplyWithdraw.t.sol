@@ -251,6 +251,23 @@ contract SupplyWithdrawTest is Test {
         market.transfer(bob, 2_000e6);
     }
 
+    /// @dev A self-transfer is a no-op: neither the balance nor the stored total changes. Guards the
+    ///      read-both-then-write-both path, which would otherwise mint `amount` when from == to (found
+    ///      by the INV-1 invariant suite).
+    function test_transfer_toSelfIsANoOp() public {
+        vm.prank(alice);
+        market.supply(address(base), 10_000e6);
+
+        uint256 balBefore = market.balanceOf(alice);
+        uint104 totalBefore = market.getMarketState().totalSupplyBase;
+
+        vm.prank(alice);
+        market.transfer(alice, 4_000e6);
+
+        assertEq(market.balanceOf(alice), balBefore, "self-transfer minted balance");
+        assertEq(market.getMarketState().totalSupplyBase, totalBefore, "self-transfer changed the total");
+    }
+
     function test_transferFrom_spendsAllowance() public {
         vm.prank(alice);
         market.supply(address(base), 10_000e6);
