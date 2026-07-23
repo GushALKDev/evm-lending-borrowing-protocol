@@ -422,6 +422,33 @@ contract SupplyWithdrawTest is Test {
         new LendingMarketHarness(_cfg(), _oneCollateral(c));
     }
 
+    function test_constructor_revertsOnMoreThan16Collaterals() public {
+        // The assetsIn bitmap is 16 bits, so at most 16 collaterals may be listed.
+        ILendingMarket.CollateralConfig[] memory many = new ILendingMarket.CollateralConfig[](17);
+        for (uint256 i = 0; i < 17; i++) {
+            MockERC20 token = new MockERC20("Collateral", "COL", 18);
+            many[i] = MarketBuilder.collateral(address(token), 18, WETH_CAP);
+        }
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InvalidConfiguration.selector, bytes32("numAssets")));
+        new LendingMarketHarness(_cfg(), many);
+    }
+
+    function test_constructor_revertsOnZeroCollateralAsset() public {
+        ILendingMarket.CollateralConfig memory c = MarketBuilder.collateral(address(weth), 18, WETH_CAP);
+        c.asset = address(0);
+        vm.expectRevert(
+            abi.encodeWithSelector(ILendingMarket.InvalidConfiguration.selector, bytes32("collateralAsset"))
+        );
+        new LendingMarketHarness(_cfg(), _oneCollateral(c));
+    }
+
+    function test_constructor_revertsOnLiquidateCFAtScale() public {
+        ILendingMarket.CollateralConfig memory c = MarketBuilder.collateral(address(weth), 18, WETH_CAP);
+        c.liquidateCollateralFactor = 10_000; // == FACTOR_SCALE, must be strictly below
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InvalidConfiguration.selector, bytes32("liquidateCF")));
+        new LendingMarketHarness(_cfg(), _oneCollateral(c));
+    }
+
     function test_constructor_revertsOnLiquidationFactorAboveScale() public {
         ILendingMarket.CollateralConfig memory c = MarketBuilder.collateral(address(weth), 18, WETH_CAP);
         c.liquidationFactor = 10_001; // above FACTOR_SCALE
@@ -474,8 +501,53 @@ contract SupplyWithdrawTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
+                        INPUT GUARD REVERTS
+    //////////////////////////////////////////////////////////////*/
+
+    function test_supplyCollateral_revertsOnZeroAmount() public {
+        vm.prank(alice);
+        vm.expectRevert(ILendingMarket.ZeroAmount.selector);
+        market.supply(address(weth), 0);
+    }
+
+    function test_withdrawBase_revertsOnZeroAmount() public {
+        vm.prank(alice);
+        market.supply(address(base), 10_000e6);
+        vm.prank(alice);
+        vm.expectRevert(ILendingMarket.ZeroAmount.selector);
+        market.withdraw(address(base), 0, new bytes[](0));
+    }
+
+    function test_withdrawCollateral_revertsOnZeroAmount() public {
+        vm.prank(alice);
+        market.supply(address(weth), 10e18);
+        vm.prank(alice);
+        vm.expectRevert(ILendingMarket.ZeroAmount.selector);
+        market.withdraw(address(weth), 0, new bytes[](0));
+    }
+
+    function test_transfer_revertsOnZeroRecipient() public {
+        vm.prank(alice);
+        market.supply(address(base), 10_000e6);
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InvalidRecipient.selector, address(0)));
+        market.transfer(address(0), 1_000e6);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                             ETH REFUND
     //////////////////////////////////////////////////////////////*/
+
+    /// @dev A caller that rejects ETH makes the refund sweep fail, reverting the whole withdraw.
+    function test_withdraw_revertsWhenRefundRejected() public {
+        RejectingReceiver caller = new RejectingReceiver(market, base);
+        base.mint(address(caller), 10_000e6);
+        caller.supply(10_000e6);
+        vm.deal(address(caller), 1 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.RefundFailed.selector, address(caller), uint256(1 ether)));
+        caller.withdrawWithValue(1_000e6, 1 ether);
+    }
 
     /// @dev withdraw is payable; any msg.value it does not use is swept back to the caller.
     function test_withdraw_refundsExcessValue() public {
@@ -490,5 +562,26 @@ contract SupplyWithdrawTest is Test {
 
         // The mock oracle path is not hit here (base withdrawal, no debt), so the full value returns.
         assertEq(alice.balance, before, "excess ETH refunded");
+    }
+}
+
+/// @dev A market caller with no payable fallback: it supplies and withdraws but reverts on the ETH
+///      refund, exercising the RefundFailed branch of _refundExcessValue.
+contract RejectingReceiver {
+    LendingMarketHarness internal immutable MARKET;
+    MockERC20 internal immutable BASE;
+
+    constructor(LendingMarketHarness market, MockERC20 base) {
+        MARKET = market;
+        BASE = base;
+    }
+
+    function supply(uint256 amount) external {
+        BASE.approve(address(MARKET), amount);
+        MARKET.supply(address(BASE), amount);
+    }
+
+    function withdrawWithValue(uint256 amount, uint256 value) external {
+        MARKET.withdraw{value: value}(address(BASE), amount, new bytes[](0));
     }
 }

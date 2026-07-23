@@ -314,6 +314,18 @@ contract AbsorbLiquidationTest is Test {
         market.buyCollateral(address(weth), 0, 100_000e6, carol, new bytes[](0));
     }
 
+    function test_buyCollateral_revertsOnZeroRecipient() public {
+        vm.prank(carol);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InvalidRecipient.selector, address(0)));
+        market.buyCollateral(address(weth), 0, 1_000e6, address(0), new bytes[](0));
+    }
+
+    function test_buyCollateral_revertsOnZeroBaseAmount() public {
+        vm.prank(carol);
+        vm.expectRevert(ILendingMarket.ZeroAmount.selector);
+        market.buyCollateral(address(weth), 0, 0, carol, new bytes[](0));
+    }
+
     /*//////////////////////////////////////////////////////////////
                         ROUND-TRIP RESERVES (6.8)
     //////////////////////////////////////////////////////////////*/

@@ -33,18 +33,18 @@
 
 ## 📊 Current Status
 
-**250 tests, all green** (Phase 8 in progress: invariant suite live and fork tests against real Ethereum mainnet dependencies; INV-1 caught a self-transfer minting bug).
+**260 tests, all green** (Phase 8 in progress: invariant suite live, fork tests against real Ethereum mainnet dependencies, static analysis clean, and coverage above 95% on every contract; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
 | [`LendingMarketAccountingTest`](../../test/unit/LendingMarketAccounting.t.sol) | Unit  |    36 | 1     |
-| [`SupplyWithdrawTest`](../../test/unit/SupplyWithdraw.t.sol)          | Unit  |    37 | 3     |
+| [`SupplyWithdrawTest`](../../test/unit/SupplyWithdraw.t.sol)          | Unit  |    45 | 3     |
 | [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol)                | Unit  |    37 | 4     |
 | [`InterestRateModelTest`](../../test/unit/InterestRateModel.t.sol)    | Unit  |    18 | 2     |
 | [`MarketAccrualWithRealCurveTest`](../../test/unit/MarketAccrualWithRealCurve.t.sol) | Unit |  4 | 2     |
 | [`AccrualOverflowTest`](../../test/unit/AccrualOverflow.t.sol)        | Unit  |     3 | 1     |
 | [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol)| Unit  |    28 | 5     |
-| [`AbsorbLiquidationTest`](../../test/unit/AbsorbLiquidation.t.sol)    | Unit  |    20 | 6     |
+| [`AbsorbLiquidationTest`](../../test/unit/AbsorbLiquidation.t.sol)    | Unit  |    22 | 6     |
 | [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol)  | Unit  |    15 | 7     |
 | [`ConversionRoundingTest`](../../test/fuzz/ConversionRounding.t.sol)  | Fuzz  |    19 | 1     |
 | [`InterestRateModelFuzzTest`](../../test/fuzz/InterestRateModel.t.sol)| Fuzz  |     6 | 2     |
@@ -55,17 +55,17 @@
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
 | [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 8 | 8 |
 | [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 2 | 8 |
-| **Total**                                                            |       | **250** |     |
+| **Total**                                                            |       | **260** |     |
 
 ### Coverage
 
 | File                        | Lines            | Statements       | Branches       | Functions       |
 | :-------------------------- | :--------------- | :--------------- | :------------- | :-------------- |
 | `src/InterestRateModel.sol` | 100.00% (17/17)  | 100.00% (25/25)  | 100.00% (4/4)  | 100.00% (3/3)   |
-| `src/LendingMarket.sol`     | 99.70% (329/330) | 97.24% (422/434) | 81.54% (53/65) | 100.00% (55/55) |
+| `src/LendingMarket.sol`     | 99.71% (343/344) | 99.56% (455/457) | 97.14% (68/70) | 100.00% (58/58) |
 | `src/PythChainlinkOracle.sol` | 98.46% (64/65) | 96.91% (94/97)   | 95.45% (21/22) | 100.00% (8/8)   |
 
-The single uncovered line in `LendingMarket.sol` is the fallthrough `revert UnknownAsset` in `_offsetOf`, which is unreachable in practice: every caller passes through `_requireListed` first, so it is a defensive guard rather than a live path. The one uncovered line in `PythChainlinkOracle.sol` is the positive-`targetExpo` scale-up branch of `_scalePyth` for the confidence value, unreachable with realistic feeds (a positive expo would need a mantissa small enough that conf still normalizes above zero). Branch coverage on `LendingMarket.sol` remains below target, now predominantly a few defensive guards; the >95% gate applies at Phase 8. Details in [Gaps & Roadmap](./07-gaps-and-roadmap.md).
+Every contract is now above the 95% gate on lines, statements, branches, and functions (roadmap 8.9). Phase 8 raised branch coverage on `LendingMarket.sol` from 81.5% to 97.1% by pinning the previously untested revert sides of the input guards (constructor `numAssets`/`collateralAsset`/`liquidateCF`, `ZeroAmount` on every entry point, `InvalidRecipient` on transfer and buyCollateral, and the `RefundFailed` sweep via a rejecting-receiver caller). The few remaining uncovered branches are defensive or physically hard to reach: the fallthrough `revert UnknownAsset` in `_offsetOf` (every caller passes `_requireListed` first, so it is unreachable), the `InsufficientCash` bound in `withdrawReserves` (reachable only when bad debt pushes reserves above cash), and the positive-`targetExpo` scale-up branch of `_scalePyth` (unreachable with realistic Pyth feeds). Details in [Gaps & Roadmap](./07-gaps-and-roadmap.md).
 
 ---
 
