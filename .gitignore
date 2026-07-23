@@ -12,6 +12,9 @@ broadcast/
 lcov.info
 coverage/
 
+# Static analysis output (Aderyn default report)
+report.md
+
 # Node (lint toolchain only)
 node_modules/
 

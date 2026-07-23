@@ -141,10 +141,8 @@ interface ILendingMarket {
     error InvalidRecipient(address recipient);
     error SupplyCapExceeded(address asset, uint128 cap, uint256 attempted);
     error InsufficientCash(uint256 requested, uint256 available);
-    error InsufficientBalance(address account, uint256 balance, uint256 amount);
     error InsufficientCollateral(address account, address asset, uint128 balance, uint256 amount);
     error RefundFailed(address to, uint256 amount);
-    error NotImplementedYet(bytes32 what);
 
     /*//////////////////////////////////////////////////////////////
                         ERRORS: HEALTH AND DEBT

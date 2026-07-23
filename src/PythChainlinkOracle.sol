@@ -53,9 +53,6 @@ contract PythChainlinkOracle is IPriceOracle {
     /// @notice Basis-point scale for the confidence and deviation checks.
     uint256 internal constant BPS_SCALE = 10_000;
 
-    /// @notice Target scale of every returned price and confidence.
-    uint256 internal constant PRICE_SCALE = 1e18;
-
     /*//////////////////////////////////////////////////////////////
                                 IMMUTABLES
     //////////////////////////////////////////////////////////////*/
@@ -172,6 +169,9 @@ contract PythChainlinkOracle is IPriceOracle {
         if (!config.set) revert UnknownAsset(asset);
 
         // --- Pyth: primary price ---
+        // The confidence is checked below (confBps against MAX_CONFIDENCE_BPS) after normalization;
+        // the detector flags getPriceUnsafe because the check is not adjacent to this line.
+        // slither-disable-next-line pyth-unchecked-confidence
         PythStructs.Price memory pythPrice = PYTH.getPriceUnsafe(config.pythFeedId);
 
         if (pythPrice.price <= 0) revert ZeroPrice(asset);

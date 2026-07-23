@@ -24,6 +24,7 @@
 | **[Protocol Management](./11-protocol-management.md)** | Phase 7: withdrawReserves bounds, owner/guardian role separation, and the constructor revert matrix including INV-13 |
 | **[Invariant Suite](./12-invariant.md)** | Phase 8: the StdInvariant handler and INV-1/2/4/5/6/7/9/11 across sequences; the self-transfer minting bug it found |
 | **[Fork Tests](./13-fork.md)** | Phase 8: the full lifecycle on an Ethereum mainnet fork against real USDC/WETH, real Pyth, and real Chainlink, via a cached Hermes VAA |
+| **[Static Analysis](./14-static-analysis.md)** | Phase 8: the Slither + Aderyn run, the dead code removed, and every false positive triaged with justification |
 | **[Fuzz](./05-fuzz.md)**                       | Conversion rounding, index monotonicity, rate properties, index-scale precision |
 | **[Mutation Checks](./06-mutation-checks.md)** | Which flipped rounding direction each test catches, and the one that round trips missed |
 | **[Gaps & Roadmap](./07-gaps-and-roadmap.md)** | What is not covered yet, and the testing deliverable of each remaining phase |

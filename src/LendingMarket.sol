@@ -530,6 +530,9 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
      *      decomposes both endpoints by sign. Reverts if the market lacks the cash to honor the
      *      withdrawal, and, on the borrow branch, if the resulting debt is dust or uncollateralized.
      */
+    // The health check pushes prices through the immutable oracle; the caller (withdraw) is
+    // nonReentrant, so emitting after that push is safe.
+    // slither-disable-next-line reentrancy-events
     function _withdrawBase(address account, uint256 amount, bytes[] calldata priceUpdate) internal {
         if (amount == 0) revert ZeroAmount();
 
@@ -568,6 +571,8 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     /**
      * @notice Withdraws collateral, running the health check only if the account has debt.
      */
+    // Same as _withdrawBase: the price push is on the immutable oracle and the caller is nonReentrant.
+    // slither-disable-next-line reentrancy-events
     function _withdrawCollateral(address account, address asset, uint256 amount, bytes[] calldata priceUpdate)
         internal
     {
@@ -598,6 +603,9 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc ILendingMarket
+    // The oracle price push is an external call, but ORACLE is the immutable oracle the protocol
+    // deploys, and the function is nonReentrant, so the flagged state-after-call is not exploitable.
+    // slither-disable-next-line reentrancy-eth,reentrancy-no-eth,reentrancy-benign
     function absorb(address account, bytes[] calldata priceUpdate)
         external
         payable
@@ -1043,6 +1051,9 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     function _refundExcessValue() internal {
         uint256 balance = address(this).balance;
         if (balance > 0) {
+            // The refund goes to msg.sender by design: it returns the caller's own unspent value. Every
+            // caller path is nonReentrant, so this final interaction cannot re-enter.
+            // slither-disable-next-line arbitrary-send-eth
             (bool ok,) = msg.sender.call{value: balance}("");
             if (!ok) revert RefundFailed(msg.sender, balance);
         }
