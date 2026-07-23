@@ -11,6 +11,10 @@ optimizer_runs = 200
 bytecode_hash = "none"
 ffi = false
 
+# Read-only access to the cached Pyth VAA fixtures the fork test replays. Scoped to that one
+# directory; ffi stays off, so the test stays deterministic (no live Hermes fetch at run time).
+fs_permissions = [{access = "read", path = "./test/fork/fixtures"}]
+
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "solady/=lib/solady/src/",

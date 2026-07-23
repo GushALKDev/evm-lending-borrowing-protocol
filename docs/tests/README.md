@@ -23,6 +23,7 @@
 | **[Absorb Liquidation](./10-absorb-liquidation.md)** | Phase 6: eligibility at price + conf, the three absorb settlements, the storefront quote, buyCollateral, and the round-trip reserve bound |
 | **[Protocol Management](./11-protocol-management.md)** | Phase 7: withdrawReserves bounds, owner/guardian role separation, and the constructor revert matrix including INV-13 |
 | **[Invariant Suite](./12-invariant.md)** | Phase 8: the StdInvariant handler and INV-1/2/4/5/6/7/9/11 across sequences; the self-transfer minting bug it found |
+| **[Fork Tests](./13-fork.md)** | Phase 8: the full lifecycle on an Ethereum mainnet fork against real USDC/WETH, real Pyth, and real Chainlink, via a cached Hermes VAA |
 | **[Fuzz](./05-fuzz.md)**                       | Conversion rounding, index monotonicity, rate properties, index-scale precision |
 | **[Mutation Checks](./06-mutation-checks.md)** | Which flipped rounding direction each test catches, and the one that round trips missed |
 | **[Gaps & Roadmap](./07-gaps-and-roadmap.md)** | What is not covered yet, and the testing deliverable of each remaining phase |
@@ -31,7 +32,7 @@
 
 ## 📊 Current Status
 
-**248 tests, all green** (Phase 8 in progress: invariant suite live, INV-1 caught a self-transfer minting bug).
+**250 tests, all green** (Phase 8 in progress: invariant suite live and fork tests against real Ethereum mainnet dependencies; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
@@ -52,7 +53,8 @@
 | [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) | Fuzz | 2 | 6     |
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
 | [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 8 | 8 |
-| **Total**                                                            |       | **248** |     |
+| [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 2 | 8 |
+| **Total**                                                            |       | **250** |     |
 
 ### Coverage
 
