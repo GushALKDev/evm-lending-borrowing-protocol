@@ -282,6 +282,7 @@ contract PythChainlinkOracleTest is Test {
             pythFeedId: WETH_FEED_ID, chainlinkFeed: address(chainlink), heartbeat: 3600, set: false
         });
         configs[1] = configs[0];
+        // solhint-disable-next-line max-line-length
         vm.expectRevert(abi.encodeWithSelector(PythChainlinkOracle.InvalidConfiguration.selector, bytes32("duplicate")));
         new PythChainlinkOracle(address(pyth), MAX_STALENESS, MAX_CONF_BPS, MAX_DEV_BPS, assets, configs);
     }
@@ -337,6 +338,7 @@ contract PythChainlinkOracleTest is Test {
     function test_constructor_revertsOnZeroHeartbeat() public {
         (address[] memory a, PythChainlinkOracle.FeedConfig[] memory c) =
             _oneConfig(address(chainlink), WETH_FEED_ID, 0);
+        // solhint-disable-next-line max-line-length
         vm.expectRevert(abi.encodeWithSelector(PythChainlinkOracle.InvalidConfiguration.selector, bytes32("heartbeat")));
         new PythChainlinkOracle(address(pyth), MAX_STALENESS, MAX_CONF_BPS, MAX_DEV_BPS, a, c);
     }

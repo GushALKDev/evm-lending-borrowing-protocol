@@ -545,6 +545,7 @@ contract SupplyWithdrawTest is Test {
         caller.supply(10_000e6);
         vm.deal(address(caller), 1 ether);
 
+        // solhint-disable-next-line max-line-length
         vm.expectRevert(abi.encodeWithSelector(ILendingMarket.RefundFailed.selector, address(caller), uint256(1 ether)));
         caller.withdrawWithValue(1_000e6, 1 ether);
     }

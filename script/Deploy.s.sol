@@ -39,8 +39,11 @@ contract Deploy is Script {
         market = _deployMarket(w, irm, oracle);
         vm.stopBroadcast();
 
+        // solhint-disable-next-line no-console
         console2.log("InterestRateModel:", address(irm));
+        // solhint-disable-next-line no-console
         console2.log("PythChainlinkOracle:", address(oracle));
+        // solhint-disable-next-line no-console
         console2.log("Market:", address(market));
     }
 
