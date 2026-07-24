@@ -33,7 +33,7 @@
 
 ## 📊 Current Status
 
-**260 tests, all green** (Phase 8 in progress: invariant suite live, fork tests against real Ethereum mainnet dependencies, static analysis clean, and coverage above 95% on every contract; INV-1 caught a self-transfer minting bug).
+**263 tests, all green** (Phase 8 in progress: invariant suite live, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, and directed-rounding fuzz on the storefront quote; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
@@ -52,10 +52,11 @@
 | [`IndexPrecisionTest`](../../test/fuzz/IndexPrecision.t.sol)          | Fuzz  |     4 | 1     |
 | [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) | Fuzz | 3 | 5     |
 | [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) | Fuzz | 2 | 6     |
+| [`QuoteRoundingTest`](../../test/fuzz/QuoteRounding.t.sol)            | Fuzz  |     3 | 8     |
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
 | [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 8 | 8 |
 | [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 2 | 8 |
-| **Total**                                                            |       | **260** |     |
+| **Total**                                                            |       | **263** |     |
 
 ### Coverage
 

@@ -11,11 +11,11 @@ The suite is layered, and each layer answers a different question.
 
 | Layer           | Directory           | Question it answers                                            | Status                  |
 | :-------------- | :------------------ | :------------------------------------------------------------- | :---------------------- |
-| **Unit**        | `test/unit/`        | Does this function do exactly what its contract says?          | ✅ Phases 1-3           |
-| **Fuzz**        | `test/fuzz/`        | Does the property hold for every input in the domain?          | ✅ Phases 1-2           |
-| **Invariant**   | `test/invariant/`   | Do the system invariants survive adversarial call sequencing?  | ⏳ Phase 8              |
-| **Integration** | `test/integration/` | Does the full lifecycle work end to end on a local deployment? | ⏳ Phase 8              |
-| **Fork**        | `test/fork/`        | Do the real external dependencies behave as assumed?           | ⏳ Phase 8              |
+| **Unit**        | `test/unit/`        | Does this function do exactly what its contract says?          | ✅ Phases 1-7           |
+| **Fuzz**        | `test/fuzz/`        | Does the property hold for every input in the domain?          | ✅ Phases 1-2, 4-6, 8   |
+| **Invariant**   | `test/invariant/`   | Do the system invariants survive adversarial call sequencing?  | ✅ Phase 8              |
+| **Integration** | `test/integration/` | Does the full lifecycle work end to end on a local deployment? | ⏳ Phase 8 (8.6 open)   |
+| **Fork**        | `test/fork/`        | Do the real external dependencies behave as assumed?           | ✅ Phase 8              |
 
 ---
 
@@ -27,7 +27,7 @@ The suite is layered, and each layer answers a different question.
 
 **Test the reachable domain; document the rest.** The protocol does not defend against states its types and invariants forbid. Where a theoretical failure boundary exists (index overflow, `fullMulDiv` overflow at absurd utilization), a test pins where the boundary is and how many orders of magnitude separate it from anything constructible. Those tests are documentation of a gap, not a defense of a reachable state.
 
-**Mocks isolate the unit under test.** The rate model is mocked when testing the market's accrual, so index behavior can be driven directly; a [separate suite](./04-unit-rate-model.md#2-marketaccrualwithrealcurvetsol--4-tests) then wires the *real* curve into the market to prove the integration. The same split will apply to the oracle from Phase 5 on.
+**Mocks isolate the unit under test.** The rate model is mocked when testing the market's accrual, so index behavior can be driven directly; a [separate suite](./04-unit-rate-model.md#2-marketaccrualwithrealcurvetsol--4-tests) then wires the *real* curve into the market to prove the integration. The same split applies to the oracle: mocked in the market suites, with the real `PythChainlinkOracle` wired in for the integration and fork tests.
 
 ---
 
@@ -37,7 +37,7 @@ All shared scaffolding lives in [`test/mocks/`](../../test/mocks).
 
 | File                       | Role                                                                                                                                                                                        |
 | :------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`LendingMarketHarness.sol`](../../test/mocks/LendingMarketHarness.sol) | Extends `LendingMarket` to expose internals. Wraps the `internal` conversion primitives as `exposed*`, exposes the single accounting path (`exposedUpdateBasePrincipal`, `setPrincipal`), allows overwriting indexes (`setIndexes`), and reads packed state (`getIndexes`, `getTotals`, `getAssetsIn`). It also fills the one remaining interface function not yet in the production contract, `withdrawReserves`, as a reverting stub so the market stays deployable until Phase 7. |
+| [`LendingMarketHarness.sol`](../../test/mocks/LendingMarketHarness.sol) | Extends `LendingMarket` to expose internals. Wraps the `internal` conversion primitives as `exposed*`, exposes the single accounting path (`exposedUpdateBasePrincipal`, `setPrincipal`), allows overwriting indexes (`setIndexes`), and reads packed state (`getIndexes`, `getTotals`, `getAssetsIn`). |
 | [`MarketBuilder.sol`](../../test/mocks/MarketBuilder.sol) | Library producing a `MarketConfig` and `CollateralConfig` at reference defaults, overridable field by field. Constructor-revert tests mutate exactly one field, so the assertion is unambiguous about which check fired. |
 | [`MockERC20.sol`](../../test/mocks/MockERC20.sol) | Minimal ERC20 with configurable `decimals()` and open `mint`/`burn`. Used as USDC (6 dec) and WETH (18 dec).                                                                                 |
 | [`MockInterestRateModel.sol`](../../test/mocks/MockInterestRateModel.sol) | Returns rates set directly via `setRates`, ignoring utilization. Lets accrual tests drive index growth without going through the curve.                              |
