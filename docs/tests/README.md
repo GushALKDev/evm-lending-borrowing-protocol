@@ -33,7 +33,7 @@
 
 ## 📊 Current Status
 
-**263 tests, all green** (Phase 8 in progress: invariant suite live, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, and directed-rounding fuzz on the storefront quote; INV-1 caught a self-transfer minting bug).
+**265 tests, all green** (Phase 8 in progress: invariant suite live, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, and the full local lifecycle plus a deploy-script rehearsal; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
@@ -54,9 +54,11 @@
 | [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) | Fuzz | 2 | 6     |
 | [`QuoteRoundingTest`](../../test/fuzz/QuoteRounding.t.sol)            | Fuzz  |     3 | 8     |
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
+| [`FullLifecycleTest`](../../test/integration/FullLifecycle.t.sol)     | Integration | 1 | 8 |
+| [`DeployScriptTest`](../../test/integration/DeployScript.t.sol)       | Integration | 1 | 8 |
 | [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 8 | 8 |
 | [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 2 | 8 |
-| **Total**                                                            |       | **263** |     |
+| **Total**                                                            |       | **265** |     |
 
 ### Coverage
 
