@@ -29,8 +29,8 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 6         | Absorb Liquidation                     | 8      | 8         | 100%     |
 | 7         | Reserves & Protocol Management         | 6      | 6         | 100%     |
 | 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 8         | 73%      |
-| 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **67**    | **88%**  |
+| 9         | Future Work (post-PoC, excluded)       | 6      | 0         | n/a      |
+| **TOTAL (PoC, phases 0-8)** |                      | **70** | **67**    | **96%**  |
 
 ---
 
