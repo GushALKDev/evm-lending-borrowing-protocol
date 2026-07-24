@@ -1,8 +1,8 @@
 # 🎲 Fuzz Tests
 
 **Section:** [Testing Documentation](./README.md)
-**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (6) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4)
-**Phases:** 1-2
+**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (6) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (3)
+**Phases:** 1-2, 8
 **Prev:** [Unit: Interest Rate Model](./04-unit-rate-model.md) · **Next:** [Mutation Checks](./06-mutation-checks.md)
 
 ---
@@ -86,3 +86,15 @@ The executable justification for the `1e15` index scale over a RAY (1e27) altern
 | [`testFuzz_indexScale_relativeErrorShrinksWithSize`](../../test/fuzz/IndexPrecision.t.sol#L98)              | The absolute gap stays at one base unit regardless of position size, so the relative gap falls below one part per billion for any position at or above `minBorrow`. |
 | [`test_indexScale_assumesSixDecimalBase`](../../test/fuzz/IndexPrecision.t.sol#L124)                        | Pins the analysis to a 6-decimal base: the conclusion is coupled to that assumption and does not transfer to an 18-decimal base market unexamined. |
 | [`test_indexScale_reportErrorAcrossPositionSizes`](../../test/fuzz/IndexPrecision.t.sol#L134)               | A reporting test that logs the measured gap across position sizes; the console output is the deliverable. The two indexes agree digit for digit — the RAY trailing zeros are padding, not signal. |
+
+---
+
+## 4. `QuoteRounding.t.sol` — 3 tests
+
+The storefront quote (`quoteCollateral`) is the third rounding surface after conversion and rate math (Roadmap 8.5). Every division floors, so the buyer never receives more collateral than the ask supports ([Guide 2, Section 9](../02-mathematics.md)). Round-trip coverage in [`AbsorbLiquidation.t.sol`](../../test/fuzz/AbsorbLiquidation.t.sol) can survive a flipped floor → ceil; these pin the quote against a locally computed exact value instead. The storefront and liquidation factors are fuzzed field by field (within the constructor's INV-13 coverage bound) so the discount and askPrice divisions land on non-exact quotients where the direction is observable.
+
+| Test                                                                                     | Asserts                                                                                     |
+| :------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
+| [`testFuzz_quoteCollateral_floorsExactly`](../../test/fuzz/QuoteRounding.t.sol#L74)         | Equals the exact truncated quote across the whole price and factor domain; a flipped floor → ceil fails by one wei. |
+| [`testFuzz_quoteCollateral_isMonotone`](../../test/fuzz/QuoteRounding.t.sol#L101)           | A larger base payment never quotes strictly less collateral: no non-monotone region.        |
+| [`testFuzz_askPrice_neverAboveSpot`](../../test/fuzz/QuoteRounding.t.sol#L119)              | The discount can only lower the ask, so a discounted market yields at least as much collateral per base as the undiscounted spot. |

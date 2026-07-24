@@ -28,9 +28,9 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 5         | Oracle (Pyth + Chainlink)              | 10     | 10        | 100%     |
 | 6         | Absorb Liquidation                     | 8      | 8         | 100%     |
 | 7         | Reserves & Protocol Management         | 6      | 6         | 100%     |
-| 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 7         | 64%      |
+| 8         | Invariant & Fuzz Testing + Audit Prep  | 11     | 8         | 73%      |
 | 9         | Future Work (post-PoC)                 | 6      | 0         | 0%       |
-| **TOTAL** |                                        | **76** | **66**    | **87%**  |
+| **TOTAL** |                                        | **76** | **67**    | **88%**  |
 
 ---
 
@@ -345,7 +345,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 - [x] **8.2** Invariant: `sum(user principals) == totalSupplyBase - totalBorrowBase` split by sign, exact integer equality
 - [x] **8.3** Invariant: index monotonicity, `supplyRate <= borrowRate`, reserves never decrease except by `absorb` shortfall/penalty timing or `withdrawReserves`
 - [x] **8.4** Invariant: no handler action leaves an account below the borrow threshold; collateral totals match per-user sums
-- [ ] **8.5** Fuzz: all conversion, rate, and quote math with directed-rounding assertions (rounding always favors the protocol)
+- [x] **8.5** Fuzz: all conversion, rate, and quote math with directed-rounding assertions (rounding always favors the protocol)
 - [ ] **8.6** End-to-end integration tests on a local deployment: full lifecycle (supply, borrow, warp, repay, absorb, buyCollateral) against MockPriceOracle-backed Pyth/Chainlink mocks, plus deployment script rehearsal on anvil
 - [x] **8.7** Fork tests on an Ethereum mainnet fork against the real external dependencies: real USDC (base) and WETH (collateral) priced by the real Pyth pull oracle plus the real Chainlink ETH/USD and USDC/USD anchors, exercising supply, borrow, accrual, and repay end to end (a cached Hermes VAA replayed through the real `updatePriceFeeds` fee/refund path, real `getPriceUnsafe`, expo/decimal normalization, real `latestRoundData`; accounts funded via `deal`). absorb/buyCollateral are excluded on the fork: with real fixed prices the only lever to force liquidation is interest accrual, but warping forward makes the cached VAA stale and the constructor forbids `borrowCF >= liquidateCF`, so both paths are covered at unit/fuzz/invariant level against controlled prices instead. wBTC dropped: its Pyth feed on the fork is chronically stale and fails the real deviation check
 - [x] **8.8** Static analysis (Slither, Aderyn) with no criticals
