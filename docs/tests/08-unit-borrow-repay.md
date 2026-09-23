@@ -16,7 +16,7 @@ Every unit test builds on one position, so the arithmetic stays checkable by han
 capacity = 10 * 2,000 * 0.80 = 16,000 USD
 ```
 
-Bob supplies 500,000 base in `setUp`, because a borrow draws on *someone else's* cash: without a funded pool the cash check fires before the capacity check and the test would be asserting the wrong guard. This bit the suite during development — see [`test_borrow_revertsWhenCashInsufficient`](../../test/unit/BorrowRepay.t.sol#L171), which pins that ordering deliberately.
+Bob supplies 500,000 base in `setUp`, because a borrow draws on *someone else's* cash: without a funded pool the cash check fires before the capacity check and the test would be asserting the wrong guard. This bit the suite during development — see [`test_borrow_revertsWhenCashInsufficient`](../../test/unit/BorrowRepay.t.sol#L172), which pins that ordering deliberately.
 
 ---
 
@@ -24,14 +24,14 @@ Bob supplies 500,000 base in `setUp`, because a borrow draws on *someone else's*
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_borrow_fromZeroOpensDebtAndSendsTokens`](../../test/unit/BorrowRepay.t.sol#L89) | A borrow from a zero balance leaves a negative principal, a debt, and tokens in the wallet |
-| [`test_borrow_updatesGlobalTotals`](../../test/unit/BorrowRepay.t.sol#L101) | `totalBorrow` tracks the debt while `totalSupply` is untouched: borrowing moves cash, not the supply book |
-| [`test_borrow_increasingAnExistingDebtStaysOnOnePath`](../../test/unit/BorrowRepay.t.sol#L110) | A second borrow accumulates rather than replacing |
-| [`test_borrow_crossingFromSupplyToDebtInOneWithdrawal`](../../test/unit/BorrowRepay.t.sol#L121) | The sign crossing: supply side zeroed, debt equal to the overshoot, in one call |
-| [`test_borrow_crossingKeepsTotalsSplitBySign`](../../test/unit/BorrowRepay.t.sol#L133) | **INV-1 across a crossing**: the account leaves the supply total *entirely* and arrives on the borrow total *whole* |
-| [`test_borrow_emitsWithdraw`](../../test/unit/BorrowRepay.t.sol#L148) | The domain event fires with the borrowed amount |
-| [`test_borrow_emitsNoTransferWhenNoSupplyIsBurned`](../../test/unit/BorrowRepay.t.sol#L158) | A pure borrow burns no supply, so the ERC20 mirror stays silent |
-| [`test_borrow_revertsWhenCashInsufficient`](../../test/unit/BorrowRepay.t.sol#L171) | Capacity is not liquidity: a fully collateralized borrow still fails if the pool is drained |
+| [`test_borrow_fromZeroOpensDebtAndSendsTokens`](../../test/unit/BorrowRepay.t.sol#L90) | A borrow from a zero balance leaves a negative principal, a debt, and tokens in the wallet |
+| [`test_borrow_updatesGlobalTotals`](../../test/unit/BorrowRepay.t.sol#L102) | `totalBorrow` tracks the debt while `totalSupply` is untouched: borrowing moves cash, not the supply book |
+| [`test_borrow_increasingAnExistingDebtStaysOnOnePath`](../../test/unit/BorrowRepay.t.sol#L111) | A second borrow accumulates rather than replacing |
+| [`test_borrow_crossingFromSupplyToDebtInOneWithdrawal`](../../test/unit/BorrowRepay.t.sol#L122) | The sign crossing: supply side zeroed, debt equal to the overshoot, in one call |
+| [`test_borrow_crossingKeepsTotalsSplitBySign`](../../test/unit/BorrowRepay.t.sol#L134) | **INV-1 across a crossing**: the account leaves the supply total *entirely* and arrives on the borrow total *whole* |
+| [`test_borrow_emitsWithdraw`](../../test/unit/BorrowRepay.t.sol#L149) | The domain event fires with the borrowed amount |
+| [`test_borrow_emitsNoTransferWhenNoSupplyIsBurned`](../../test/unit/BorrowRepay.t.sol#L159) | A pure borrow burns no supply, so the ERC20 mirror stays silent |
+| [`test_borrow_revertsWhenCashInsufficient`](../../test/unit/BorrowRepay.t.sol#L172) | Capacity is not liquidity: a fully collateralized borrow still fails if the pool is drained |
 
 The crossing tests are the load-bearing ones. There is no `borrow()` function and no branch on the crossing itself: `_updateBasePrincipal` decomposes both endpoints by sign, so a crossing is just one part going to zero as the other leaves zero. These two tests are what prove that decomposition is exact rather than merely plausible.
 
@@ -41,15 +41,15 @@ The crossing tests are the load-bearing ones. There is no `borrow()` function an
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_capacity_borrowExactlyAtCapacitySucceeds`](../../test/unit/BorrowRepay.t.sol#L187) | The boundary is inclusive: `debt <= capacity` |
-| [`test_capacity_borrowOneWeiPastCapacityReverts`](../../test/unit/BorrowRepay.t.sol#L197) | One wei past it is refused, with both values in the revert payload |
-| [`test_capacity_confidenceBandShrinksCollateralValue`](../../test/unit/BorrowRepay.t.sol#L209) | Collateral valued at `price - conf`: a 100 USD band drops capacity to 15,200 |
-| [`test_capacity_confidenceBandInflatesDebtValue`](../../test/unit/BorrowRepay.t.sol#L221) | Debt valued at `price + conf`: a 10% band makes 15,000 count as 16,500 |
-| [`test_capacity_isZeroWithoutCollateral`](../../test/unit/BorrowRepay.t.sol#L232) | No collateral is no capacity, not an unbounded borrow |
-| [`test_capacity_ignoresCollateralNotPosted`](../../test/unit/BorrowRepay.t.sol#L242) | Only assets in the `assetsIn` bitmap count; wallet holdings grant nothing |
-| [`test_capacity_priceDropCanLeaveAnOpenPositionUncollateralized`](../../test/unit/BorrowRepay.t.sol#L249) | An open position can go underwater on price alone, with no action by the account |
-| [`test_capacity_viewAgreesWithTheEnforcedCheck`](../../test/unit/BorrowRepay.t.sol#L261) | The public view never disagrees with the check that gated the borrow |
-| [`test_capacity_sumsAcrossAssetsWithDifferentDecimals`](../../test/unit/BorrowRepay.t.sol#L282) | Capacity sums across assets, each scaled by *its own* decimals |
+| [`test_capacity_borrowExactlyAtCapacitySucceeds`](../../test/unit/BorrowRepay.t.sol#L188) | The boundary is inclusive: `debt <= capacity` |
+| [`test_capacity_borrowOneWeiPastCapacityReverts`](../../test/unit/BorrowRepay.t.sol#L198) | One wei past it is refused, with both values in the revert payload |
+| [`test_capacity_confidenceBandShrinksCollateralValue`](../../test/unit/BorrowRepay.t.sol#L210) | Collateral valued at `price - conf`: a 100 USD band drops capacity to 15,200 |
+| [`test_capacity_confidenceBandInflatesDebtValue`](../../test/unit/BorrowRepay.t.sol#L222) | Debt valued at `price + conf`: a 10% band makes 15,000 count as 16,500 |
+| [`test_capacity_isZeroWithoutCollateral`](../../test/unit/BorrowRepay.t.sol#L233) | No collateral is no capacity, not an unbounded borrow |
+| [`test_capacity_ignoresCollateralNotPosted`](../../test/unit/BorrowRepay.t.sol#L243) | Only assets in the `assetsIn` bitmap count; wallet holdings grant nothing |
+| [`test_capacity_priceDropCanLeaveAnOpenPositionUncollateralized`](../../test/unit/BorrowRepay.t.sol#L250) | An open position can go underwater on price alone, with no action by the account |
+| [`test_capacity_viewAgreesWithTheEnforcedCheck`](../../test/unit/BorrowRepay.t.sol#L262) | The public view never disagrees with the check that gated the borrow |
+| [`test_capacity_sumsAcrossAssetsWithDifferentDecimals`](../../test/unit/BorrowRepay.t.sol#L283) | Capacity sums across assets, each scaled by *its own* decimals |
 
 Two of these deserve their reasoning recorded.
 
@@ -63,12 +63,13 @@ Two of these deserve their reasoning recorded.
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_minBorrow_revertsOnADustBorrow`](../../test/unit/BorrowRepay.t.sol#L355) | A 1 USDC borrow is refused despite ample capacity |
-| [`test_minBorrow_borrowExactlyAtTheMinimumSucceeds`](../../test/unit/BorrowRepay.t.sol#L363) | The bound is inclusive |
-| [`test_minBorrow_revertsWhenACrossingWouldLeaveDust`](../../test/unit/BorrowRepay.t.sol#L372) | A crossing landing between zero and `minBorrow` is dust too, even though nothing was "borrowed" |
-| [`test_minBorrow_doesNotBlockRepayingToZero`](../../test/unit/BorrowRepay.t.sol#L384) | Repaying a position to exactly zero stays reachable |
+| [`test_minBorrow_revertsOnADustBorrow`](../../test/unit/BorrowRepay.t.sol#L356) | A 1 USDC borrow is refused despite ample capacity |
+| [`test_minBorrow_borrowExactlyAtTheMinimumSucceeds`](../../test/unit/BorrowRepay.t.sol#L364) | The bound is inclusive |
+| [`test_minBorrow_revertsWhenACrossingWouldLeaveDust`](../../test/unit/BorrowRepay.t.sol#L373) | A crossing landing between zero and `minBorrow` is dust too, even though nothing was "borrowed" |
+| [`test_minBorrow_doesNotBlockRepayingToZero`](../../test/unit/BorrowRepay.t.sol#L385) | Repaying a position to exactly zero stays reachable |
+| [`test_minBorrow_doesNotBlockAPartialRepayIntoTheDustBand`](../../test/unit/BorrowRepay.t.sol#L398) | Repaying 100 of a 150 debt succeeds and leaves 50, below `minBorrow`: repays are never dust-guarded |
 
-The guard is enforced against the **resulting debt**, not the borrowed amount. That placement is what makes the third test pass, and the fourth one is its necessary counterweight: a guard on "any debt below `minBorrow`" applied indiscriminately would trap a borrower in a position they could neither shrink nor close. Dust is forbidden on the way down, never on the way out.
+The guard is enforced against the **resulting debt**, not the borrowed amount. That placement is what makes the third test pass, and the fourth and fifth are its necessary counterweight: a guard on "any debt below `minBorrow`" applied indiscriminately would trap a borrower in a position they could neither shrink nor close. Dust is forbidden on the way down, never on the way out, which is the form of INV-10 the invariant suite asserts.
 
 ---
 
@@ -76,14 +77,14 @@ The guard is enforced against the **resulting debt**, not the borrowed amount. T
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_repay_partialReducesDebt`](../../test/unit/BorrowRepay.t.sol#L398) | A partial repay shrinks the debt and creates no supply side |
-| [`test_repay_exactAmountClosesThePosition`](../../test/unit/BorrowRepay.t.sol#L409) | An exact repay lands on principal zero, not near it |
-| [`test_repay_overpaymentCrossesIntoSupply`](../../test/unit/BorrowRepay.t.sol#L421) | Overpaying crosses the sign the other way; the excess becomes supply |
-| [`test_repay_crossingKeepsTotalsSplitBySign`](../../test/unit/BorrowRepay.t.sol#L432) | INV-1 across the reverse crossing |
-| [`test_repay_maxSentinelRepaysExactlyTheDebt`](../../test/unit/BorrowRepay.t.sol#L444) | `type(uint256).max` pulls exactly the debt and not one wei more |
-| [`test_repay_maxSentinelRevertsWithoutDebt`](../../test/unit/BorrowRepay.t.sol#L457) | The sentinel with no debt is an error, not a no-op |
-| [`test_repay_maxSentinelClearsAccruedInterest`](../../test/unit/BorrowRepay.t.sol#L465) | The sentinel clears the debt *as accrued*, not as opened |
-| [`test_repay_worksWithoutAnyPrice`](../../test/unit/BorrowRepay.t.sol#L484) | Repayment needs no oracle at all |
+| [`test_repay_partialReducesDebt`](../../test/unit/BorrowRepay.t.sol#L412) | A partial repay shrinks the debt and creates no supply side |
+| [`test_repay_exactAmountClosesThePosition`](../../test/unit/BorrowRepay.t.sol#L423) | An exact repay lands on principal zero, not near it |
+| [`test_repay_overpaymentCrossesIntoSupply`](../../test/unit/BorrowRepay.t.sol#L435) | Overpaying crosses the sign the other way; the excess becomes supply |
+| [`test_repay_crossingKeepsTotalsSplitBySign`](../../test/unit/BorrowRepay.t.sol#L446) | INV-1 across the reverse crossing |
+| [`test_repay_maxSentinelRepaysExactlyTheDebt`](../../test/unit/BorrowRepay.t.sol#L458) | `type(uint256).max` pulls exactly the debt and not one wei more |
+| [`test_repay_maxSentinelRevertsWithoutDebt`](../../test/unit/BorrowRepay.t.sol#L471) | The sentinel with no debt is an error, not a no-op |
+| [`test_repay_maxSentinelClearsAccruedInterest`](../../test/unit/BorrowRepay.t.sol#L479) | The sentinel clears the debt *as accrued*, not as opened |
+| [`test_repay_worksWithoutAnyPrice`](../../test/unit/BorrowRepay.t.sol#L498) | Repayment needs no oracle at all |
 
 The last one is a liveness property worth stating plainly: repaying can only improve health, so it must never consult a price. The test wipes both feeds — making every `getPrice` call revert — and repays anyway. A borrower must be able to exit a position during exactly the oracle outage that would otherwise trap them.
 
@@ -93,9 +94,9 @@ The last one is a liveness property worth stating plainly: repaying can only imp
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_accrual_growsDebtOverTime`](../../test/unit/BorrowRepay.t.sol#L503) | Interest compounds on the debt |
-| [`test_accrual_borrowAccruesBeforeTheCapacityCheck`](../../test/unit/BorrowRepay.t.sol#L516) | `withdraw` values the debt *after* accrual when checking capacity |
-| [`test_accrual_repayAccruesBeforeSettling`](../../test/unit/BorrowRepay.t.sol#L542) | `supply` settles the accrued debt, leaving no interest behind |
+| [`test_accrual_growsDebtOverTime`](../../test/unit/BorrowRepay.t.sol#L517) | Interest compounds on the debt |
+| [`test_accrual_borrowAccruesBeforeTheCapacityCheck`](../../test/unit/BorrowRepay.t.sol#L530) | `withdraw` values the debt *after* accrual when checking capacity |
+| [`test_accrual_repayAccruesBeforeSettling`](../../test/unit/BorrowRepay.t.sol#L556) | `supply` settles the accrued debt, leaving no interest behind |
 
 The borrow test is shaped to fail if the accrual were removed rather than merely to pass with it. It first asserts the *stale* reading would leave room to borrow, then asserts the call reverts `NotCollateralized` — an outcome only the accrued reading can produce. Asserting the post-state alone would pass just as happily against a contract that never accrued.
 
@@ -105,8 +106,8 @@ The borrow test is shaped to fail if the accrual were removed rather than merely
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_withdrawCollateral_revertsWhenItWouldUndercollateralizeTheDebt`](../../test/unit/BorrowRepay.t.sol#L329) | Pulling collateral that the debt still needs is refused |
-| [`test_withdrawCollateral_allowedWhileTheDebtStaysCovered`](../../test/unit/BorrowRepay.t.sol#L339) | Excess collateral is released while the position stays healthy |
+| [`test_withdrawCollateral_revertsWhenItWouldUndercollateralizeTheDebt`](../../test/unit/BorrowRepay.t.sol#L330) | Pulling collateral that the debt still needs is refused |
+| [`test_withdrawCollateral_allowedWhileTheDebtStaysCovered`](../../test/unit/BorrowRepay.t.sol#L340) | Excess collateral is released while the position stays healthy |
 
 Phase 3 wired this hook against the oracle but could never reach it, since debt was impossible. These are the first tests to execute it with a real negative principal.
 
@@ -116,8 +117,8 @@ Phase 3 wired this hook against the oracle but could never reach it, since debt 
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_pause_withdrawFlagBlocksBorrowing`](../../test/unit/BorrowRepay.t.sol#L560) | `PAUSE_WITHDRAW` stops borrowing, since borrowing *is* withdrawing |
-| [`test_pause_supplyFlagAlsoBlocksRepayment`](../../test/unit/BorrowRepay.t.sol#L573) | `PAUSE_SUPPLY` also stops repayment |
+| [`test_pause_withdrawFlagBlocksBorrowing`](../../test/unit/BorrowRepay.t.sol#L574) | `PAUSE_WITHDRAW` stops borrowing, since borrowing *is* withdrawing |
+| [`test_pause_supplyFlagAlsoBlocksRepayment`](../../test/unit/BorrowRepay.t.sol#L587) | `PAUSE_SUPPLY` also stops repayment |
 
 The second is documented as a consequence, not a feature: repay shares an entry point with supply, so pausing one pauses the other. Recorded here so the coupling is visible in the test suite rather than discovered during an incident, when a guardian pausing deposits would also be freezing borrowers out of deleveraging. Revisit if the pause surface is ever split.
 
@@ -127,7 +128,7 @@ The second is documented as a consequence, not a feature: repay shares an entry 
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_reentrancy_hostileOracleCannotBorrowTwice`](../../test/unit/BorrowRepay.t.sol#L594) | A hostile oracle calling back into `withdraw` is refused, leaving no debt and no tokens moved |
+| [`test_reentrancy_hostileOracleCannotBorrowTwice`](../../test/unit/BorrowRepay.t.sol#L607) | A hostile oracle calling back into `withdraw` is refused, leaving no debt and no tokens moved |
 
 This phase put an external call in the middle of a state-changing path: the borrow branch writes the principal, calls the oracle to push prices, and only then transfers tokens. That ordering is deliberate — the health check must see the position the account is actually left holding — but it means a hostile oracle receives control while the principal is already updated and the cash has not yet left. Without the `nonReentrant` guard on `withdraw`, it could borrow a second time against a single capacity check.
 
@@ -158,7 +159,7 @@ The two capacity properties bracket the boundary from opposite sides, which is w
 
 ## What these tests do not cover
 
-- **Liquidation.** An account can now go underwater ([`test_capacity_priceDropCanLeaveAnOpenPositionUncollateralized`](../../test/unit/BorrowRepay.t.sol#L249)) and nothing can yet be done about it. `absorb` is Phase 6.
+- **Liquidation.** An account can now go underwater ([`test_capacity_priceDropCanLeaveAnOpenPositionUncollateralized`](../../test/unit/BorrowRepay.t.sol#L250)) and nothing can yet be done about it. `absorb` is Phase 6.
 - **Real prices.** Everything runs against `MockPriceOracle`. Staleness, deviation, and fee mechanics are Phase 5.
 - **Multi-account invariants.** The summed INV-1/INV-5 assertions across many accounts remain Phase 8.
 

@@ -114,8 +114,11 @@ INV-9:  every mutating call that can reduce an account's health ends with
         isBorrowCollateralized(account) == true; health-improving calls
         (supply, repay, transfers received) are legal on any account
 
-INV-10: after any user-initiated action: borrowBalanceOf(account) == 0
-        or borrowBalanceOf(account) >= minBorrow
+INV-10: every action that creates or grows debt (the borrow branch of
+        withdraw) ends with borrowBalanceOf(account) == 0
+        or borrowBalanceOf(account) >= minBorrow; repays and received
+        transfers are health-improving and are never blocked, so they may
+        leave a smaller debt (see INV-9)
 
 INV-11: totalSupplyBase == 0  =>  totalBorrowBase == 0
         (debt cannot exist against an empty pool)
@@ -137,8 +140,9 @@ INV-13 (absorb coverage condition, Guide 2 Section 8):
 ```
 INV-14: getSupplyRate(U) <= getBorrowRate(U) for all U in [0, 1e18];
         both monotone non-decreasing in U; continuous at the kink;
-        both return for every utilization the market can produce (bounded to
-        ~[0, 1e18] by the accounting), the unclamped kinked curve as in Aave
+        both return for every utilization the market can produce (U > 1e18 is
+        reachable, Guide 2 Section 4, and there the per-unit bound does not
+        hold by design), the unclamped kinked curve as in Aave
 ```
 
 ---
@@ -289,11 +293,11 @@ Four layers, mapping directly to [ROADMAP Phase 8](./ROADMAP.md#phase-8-invarian
 
 ### Invariant testing (Foundry stateful fuzzing)
 
-**Handler design.** One handler contract wrapping every public mutating function with bounded random inputs, driving a cast of actors (3 suppliers, 3 borrowers, 1 liquidator, owner, guardian) plus a `warp` action (time jumps up to 30 days) and a `movePrice` action (oracle mock steps within and beyond confidence bounds). Ghost variables track: every base inflow/outflow (for INV-5), reserve values before/after each call (for INV-4), and per-account principal sums (for INV-1).
+**Handler design.** One handler contract wrapping every public mutating function with bounded random inputs, driving a cast of actors (3 suppliers, 3 borrowers, 1 liquidator, owner, guardian) plus a `warp` action (time jumps up to 30 days), a `movePrice` action (oracle mock steps within and beyond confidence bounds), and a `togglePause` action (random `PAUSE_*` flag sets, so every invariant also runs under partial pauses). Ghost variables track every base inflow/outflow (for INV-5) and the reserves around each call (for INV-4); per-action properties are latched by the handler and asserted globally.
 
-**Asserted properties per run:** INV-1 through INV-11 verbatim, plus: absorb-only-when-liquidatable, no action strands `0 < debt < minBorrow`, and `getReserves()` deltas match the per-operation monotonicity table in [Guide 2, Section 6](./02-mathematics.md#6-interest-split-and-reserve-growth).
+**Asserted properties per run:** INV-1 through INV-11, with INV-3 checked at the live indexes (the stateless fuzz covers the full index domain) and INV-9/INV-10 as per-action latches; INV-14 at the live utilization; absorb-only-when-liquidatable (and its converse, that the view and the check never disagree); and `getReserves()` deltas matching the per-operation monotonicity table in [Guide 2, Section 6](./02-mathematics.md#6-interest-split-and-reserve-growth) exactly, with the pure accrue at a 1-wei tolerance. INV-12 and INV-13 are constructor-enforced and immutable, so they are tested at construction, not per step.
 
-**Config target:** `runs = 1000`, `depth = 100`, fail-on-revert off with reason allowlisting, plus one dedicated run with `PAUSE_*` flags randomly toggled to prove invariants hold under partial pauses.
+**Config:** `runs = 1000`, `depth = 100`, fail-on-revert off with reason allowlisting: every handler revert must carry one of the errors `ILendingMarket` declares, so a panic or foreign revert cannot hide as a harmless no-op.
 
 ### Fuzz testing (stateless, per function)
 

@@ -23,6 +23,13 @@ import {Handler} from "./Handler.sol";
 contract InvariantsTest is Test {
     uint64 internal constant BASE_INDEX_SCALE = 1e15;
     uint256 internal constant FACTOR_SCALE = 10_000;
+    // Low enough that the borrowers' collateral supplies (up to 100 WETH per call) reach it inside a
+    // run, so INV-8 is exercised at the bound instead of holding vacuously.
+    uint128 internal constant WETH_SUPPLY_CAP = 500e18;
+    // Small against the borrowers' capacity (and supplyBase is bounded to 50k per call), so sequences
+    // sweep utilization from zero through the kink to above 100%. At 10M the suite never reached 10%,
+    // leaving the jump-rate regime, cash scarcity, and INV-14 unexercised.
+    uint256 internal constant SEED_LIQUIDITY = 100_000e6;
 
     LendingMarketHarness internal market;
     MockERC20 internal base;
@@ -51,7 +58,7 @@ contract InvariantsTest is Test {
         cfg.targetReserves = 100_000_000e6; // high, so buyCollateral stays reachable
 
         ILendingMarket.CollateralConfig[] memory collaterals = new ILendingMarket.CollateralConfig[](1);
-        collaterals[0] = MarketBuilder.collateral(address(weth), 18, 1_000_000e18);
+        collaterals[0] = MarketBuilder.collateral(address(weth), 18, WETH_SUPPLY_CAP);
 
         market = new LendingMarketHarness(cfg, collaterals);
 
@@ -65,10 +72,10 @@ contract InvariantsTest is Test {
 
         // Seed initial liquidity so borrows are possible from the first steps.
         address seed = suppliers[0];
-        base.mint(seed, 10_000_000e6);
+        base.mint(seed, SEED_LIQUIDITY);
         vm.startPrank(seed);
         base.approve(address(market), type(uint256).max);
-        market.supply(address(base), 10_000_000e6);
+        market.supply(address(base), SEED_LIQUIDITY);
         vm.stopPrank();
 
         handler = new Handler(market, base, weth, oracle, owner, guardian, suppliers, borrowers, liquidator);
@@ -128,12 +135,14 @@ contract InvariantsTest is Test {
                         INV-2: INDEX MONOTONICITY (8.3)
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev No ordering between the two indexes is asserted: above U = 1 / (1 - RF) the per-unit supply
+    ///      rate exceeds the borrow rate (Guide 2, Section 4), so the supply index can overtake the
+    ///      borrow index while suppliers still earn less in total than borrowers pay. The load-bearing
+    ///      form of that claim is reserve growth, asserted by the two INV-4 invariants.
     function invariant_INV2_indexesMonotoneAboveSeed() public view {
         (uint64 supplyIndex, uint64 borrowIndex) = market.getIndexes();
         assertGe(supplyIndex, BASE_INDEX_SCALE, "INV-2: supply index below seed");
         assertGe(borrowIndex, BASE_INDEX_SCALE, "INV-2: borrow index below seed");
-        // Borrow index outruns supply index: borrowers always pay at least what suppliers receive.
-        assertGe(borrowIndex, supplyIndex, "INV-2: borrow index below supply index");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -143,7 +152,7 @@ contract InvariantsTest is Test {
     /// @dev The market's physical base balance equals the ghost-tracked net of every recorded inflow
     ///      and outflow, plus the seed liquidity. No base moves without an accounting entry.
     function invariant_INV5_cashConservation() public view {
-        uint256 seeded = 10_000_000e6;
+        uint256 seeded = SEED_LIQUIDITY;
         uint256 expected = seeded + handler.ghostBaseIn() - handler.ghostBaseOut();
         assertEq(base.balanceOf(address(market)), expected, "INV-5: cash != ghost-tracked net flows");
     }
@@ -217,5 +226,100 @@ contract InvariantsTest is Test {
     ///      accumulates (verified separately over repeated accruals), so 1 wei is the exact tolerance.
     function invariant_INV4_pureAccrueDoesNotBleedReserves() public view {
         assertGe(handler.reservesAfterWarp() + 1, handler.reservesBeforeWarp(), "INV-4: pure accrue bled reserves");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+          INV-4: RESERVE TABLE (per operation, Guide 2 Section 6)
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Every successful action moved reserves in the direction the table allows: supply, repay,
+    ///      withdraw, borrow, and transfer never lower them; collateral moves leave them unchanged;
+    ///      buyCollateral raises them by exactly the base paid; absorb never raises them; and
+    ///      withdrawReserves lowers them by exactly the amount. Exact, no tolerance: see the Handler.
+    function invariant_INV4_reserveDeltasMatchTheTable() public view {
+        assertFalse(handler.reserveTableViolated(), string.concat("INV-4 table: ", handler.reserveTableViolation()));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                INV-3: ROUND TRIPS AT THE LIVE INDEXES
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev The stateless fuzz proves INV-3 at random indexes; this proves it at the indexes the
+    ///      sequence actually evolved, on every account's real balance and debt plus fixed probes.
+    function invariant_INV3_roundTripsFavorTheProtocolAtLiveIndexes() public view {
+        uint256 n = handler.actorsLength();
+        for (uint256 i = 0; i < n; i++) {
+            address a = handler.actorAt(i);
+            _assertRoundTrips(market.balanceOf(a));
+            _assertRoundTrips(market.borrowBalanceOf(a));
+        }
+        _assertRoundTrips(1);
+        _assertRoundTrips(123_456_789);
+        _assertRoundTrips(1_000_000e6 + 1);
+    }
+
+    function _assertRoundTrips(uint256 pv) internal view {
+        uint256 supplyBack = market.exposedPresentValueSupply(market.exposedPrincipalValueSupply(pv));
+        assertLe(supplyBack, pv, "INV-3: supply round trip favors the account");
+        uint256 debtBack = market.exposedPresentValueBorrow(market.exposedPrincipalValueBorrow(pv));
+        assertGe(debtBack, pv, "INV-3: debt round trip favors the account");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        INV-8: SUPPLY CAP
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Only supply raises totalsCollateral and it is capped at acceptance, while withdraw and
+    ///      absorb only lower it, so the per-acceptance bound holds as a global state.
+    function invariant_INV8_collateralWithinSupplyCap() public view {
+        assertLe(market.totalsCollateral(address(weth)), WETH_SUPPLY_CAP, "INV-8: collateral total above the cap");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                      INV-10: NO DUST DEBT CREATED
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Per-action, like INV-9: the borrow branch of withdraw (the only action that creates or grows
+    ///      debt) never leaves the acting account with 0 < debt < minBorrow. Repays and received
+    ///      transfers are health-improving and may legally leave a smaller debt (Guide 6, INV-10).
+    function invariant_INV10_noActionCreatesDustDebt() public view {
+        assertFalse(handler.inv10Violated(), "INV-10: a borrow left debt in the dust band");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    INV-14: SUPPLY RATE BOUNDED BY BORROW RATE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev The stateless fuzz covers every U in [0, 1e18]; this checks the utilization the sequence
+    ///      actually produced, within the same domain. Above U = 1 the market is reachable but the
+    ///      per-unit bound is not promised (Guide 2, Section 4): past 1 / (1 - RF) it fails by design.
+    function invariant_INV14_supplyRateAtMostBorrowRate() public view {
+        uint256 u = market.getUtilization();
+        if (u > 1e18) return;
+        assertLe(irm.getSupplyRate(u), irm.getBorrowRate(u), "INV-14: supply rate above borrow rate");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                  ABSORB ONLY WHEN LIQUIDATABLE (Guide 6)
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev absorb succeeded only on accounts the public view reported liquidatable, and never rejected
+    ///      one it reported liquidatable: the view and the check gating the absorb cannot disagree.
+    function invariant_absorbOnlyWhenLiquidatable() public view {
+        assertFalse(handler.absorbedWhileHealthy(), "absorb succeeded on a healthy account");
+        assertFalse(handler.eligibleButNotAbsorbed(), "absorb rejected an account the view reported eligible");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        REVERT-REASON ALLOWLIST
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev fail_on_revert is off, so this is what keeps a panic or a foreign revert from hiding as a
+    ///      harmless no-op: every handler revert must carry one of the market's declared errors.
+    function invariant_everyRevertIsADeclaredError() public view {
+        assertFalse(
+            handler.unexpectedRevert(),
+            string.concat("undeclared revert reason: ", vm.toString(handler.unexpectedRevertReason()))
+        );
     }
 }

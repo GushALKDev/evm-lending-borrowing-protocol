@@ -28,9 +28,9 @@ Each phase should be completed before moving to the next. Within each phase, the
 | 5         | Oracle (Pyth + Chainlink)              | 10     | 10        | 100%     |
 | 6         | Absorb Liquidation                     | 8      | 8         | 100%     |
 | 7         | Reserves & Protocol Management         | 6      | 6         | 100%     |
-| 8         | Invariant & Fuzz Testing + Audit Prep  | 13     | 10        | 77%      |
+| 8         | Invariant & Fuzz Testing + Audit Prep  | 13     | 11        | 85%      |
 | 9         | Future Work (post-PoC, excluded)       | 6      | 0         | n/a      |
-| **TOTAL (PoC, phases 0-8)** |                      | **72** | **69**    | **96%**  |
+| **TOTAL (PoC, phases 0-8)** |                      | **72** | **70**    | **97%**  |
 
 ---
 
@@ -194,9 +194,10 @@ Each phase should be completed before moving to the next. Within each phase, the
 > ERC20-adjacent shape. No event change.
 >
 > **Dust guard placement:** `minBorrow` is enforced against the *resulting* debt rather than the
-> borrowed amount, so it also rejects a partial repay that would strand a position in the dust band.
-> Repaying to exactly zero stays reachable, or a borrower could be trapped in a position they cannot
-> close (`test_minBorrow_doesNotBlockRepayingToZero`).
+> borrowed amount, so it also rejects a supply-to-debt crossing that would land in the dust band.
+> It binds only the borrow branch of `withdraw`: repays are health-improving and never blocked, so a
+> partial repay may leave a debt below `minBorrow` (`test_minBorrow_doesNotBlockAPartialRepayIntoTheDustBand`)
+> and repaying to exactly zero stays reachable (`test_minBorrow_doesNotBlockRepayingToZero`).
 >
 > **`InsufficientBalance` on the base path is now unreachable:** crossing below zero is a borrow, not
 > an error. The error remains declared for the collateral path.
@@ -351,7 +352,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 - [x] **8.8** Static analysis (Slither, Aderyn) with no criticals
 - [x] **8.9** Coverage >95% on all contracts
 - [x] **8.10** Liquidation through the real oracle: `absorb` and `buyCollateral` on a production `LendingMarket` priced by `PythChainlinkOracle` over the SDK's fee-charging `MockPyth` and `MockChainlinkFeed` anchors, with `msg.value > 0`: exact fee consumed, surplus refunded to the caller, market and oracle left holding no ETH, and both paths reverting when underfunded
-- [ ] **8.11** Invariant suite completion against the [06-security.md Section 7](./06-security.md#7-testing-plan) plan: INV-3 at the live indexes, INV-8, INV-10, INV-14, the per-operation reserve table of [02-mathematics.md Section 6](./02-mathematics.md#6-interest-split-and-reserve-growth), absorb-only-when-liquidatable, and revert-reason allowlisting in the handler
+- [x] **8.11** Invariant suite completion against the [06-security.md Section 7](./06-security.md#7-testing-plan) plan: INV-3 at the live indexes, INV-8, INV-10, INV-14, the per-operation reserve table of [02-mathematics.md Section 6](./02-mathematics.md#6-interest-split-and-reserve-growth), absorb-only-when-liquidatable, and revert-reason allowlisting in the handler
 - [ ] **8.12** Audit checklist from [06-security.md](./06-security.md) completed + internal line-by-line review
 - [ ] **8.13** Findings remediation and re-run of the full suite
 
@@ -363,7 +364,15 @@ Each phase should be completed before moving to the next. Within each phase, the
 > entry points fails the suite.
 >
 > **8.11 note:** the Phase 8 invariant suite shipped INV-1/2/4/5/6/7/9/11, while Guide 6 Section 7
-> promised INV-1 through INV-11 plus three derived properties. This item closes the difference.
+> promised INV-1 through INV-11 plus three derived properties. This item closes the difference: 15
+> invariants, all green at 1000 x 100, each new one falsified by a targeted mutant. It also fixed a
+> pre-existing blind spot: the 10M seed liquidity kept utilization below 10% in every sequence, so the
+> kink, the jump rate, and `U > 1` were never exercised; rebalanced to a 100k seed, sequences now reach
+> utilization above 100% with every spec invariant holding. That exposed one pre-existing test
+> assertion stronger than the spec (INV-2's `borrowIndex >= supplyIndex`, false above `U = 1/(1-RF)`),
+> now removed. Adding INV-10 also surfaced that Guide 6 stated
+> it over "any user-initiated action", which the design never enforced: repays are deliberately not
+> dust-guarded. Guide 6 and the Phase 4 note above now state the enforced form.
 
 **Deliverables:**
 
@@ -397,6 +406,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-09-23 | Phase 8 invariant suite completion (8.11): the handler now latches the per-operation reserve table of Guide 2 Section 6 exactly (supply, repay, withdraw, borrow, and transfer never lower reserves; collateral moves leave them unchanged; `buyCollateral` raises them by exactly the base paid; `absorb` never raises them; `withdrawReserves` lowers them by exactly the amount), INV-10 on the borrow branch, and absorb eligibility in both directions, and every `catch {}` became a revert-reason allowlist of the market's declared errors. New global invariants: INV-3 at the live indexes, INV-8 (the WETH cap lowered to 500 so the bound is actually reached), INV-14 at the live utilization. Probes showed utilization never passed 10% under the old 10M seed, so the seed drops to 100k and `supplyBase` to 50k per call; sequences now reach utilization above 100%, which falsified a pre-existing INV-2 assertion (`borrowIndex >= supplyIndex`) that Guide 6 never states and that is false above `U = 1/(1-RF)`; it was removed and the stateful INV-14 restricted to the promised `U <= 1e18` domain. 15 invariants green over 1.5M calls with no undeclared revert; eight targeted mutants each fail the matching invariant (a flipped `presentValueBorrow` passes the live-index INV-3 by construction and is caught by the reserve table). INV-10 restated in Guide 6 to the enforced form (repays are never dust-guarded), pinned by a new unit test, and the Phase 4 note and `_withdrawBase` comment corrected. Regenerated 83 drifted test line anchors across the testing docs. 277 total green |
 | 2026-09-23 | Phase 8 liquidation through the real oracle (8.10): new `OracleMarketLiquidationTest` drives `absorb` and `buyCollateral` on a production `LendingMarket` priced by `PythChainlinkOracle` over the SDK's `MockPyth`, crashing WETH with a fresh signed update plus a moved Chainlink anchor. Asserts the exact surplus settlement, the seized inventory, the reserve deltas, that only the `4 wei` Pyth fee is consumed per call with the surplus refunded, that market and oracle hold no ETH, and that both entry points revert `InsufficientFee` when underfunded. Added items 8.10 and 8.11 (invariant suite completion) after a review of the roadmap against the code; the audit checklist and remediation move to 8.12 and 8.13. 8.6 reworded to what it ships (MockPriceOracle, in-test script rehearsal). 269 total green |
 | 2026-07-23 | Phase 8 coverage (8.9): every contract now clears the >95% gate on lines (99.5%), statements (99.1%), branches (96.9%), and functions (100%). The lagging metric was branch coverage on `LendingMarket.sol`, raised from 81.5% to 97.1% by pinning the previously untested revert sides of the input guards: the constructor's `numAssets`/`collateralAsset`/`liquidateCF` checks, `ZeroAmount` on every entry point, `InvalidRecipient` on transfer and buyCollateral, and the `RefundFailed` sweep via a rejecting-receiver caller. The remaining uncovered branches are defensive or physically hard to reach (the unreachable `UnknownAsset` fallthrough in `_offsetOf`, the `InsufficientCash` bound in `withdrawReserves` that needs bad debt above cash, and the positive-expo Pyth scale-up), documented in the testing README. 10 new revert tests; 260 total green |
 | 2026-07-23 | Phase 8 static analysis (8.8): ran Slither 0.11.3 and Aderyn 0.6.8 over `src/`. Neither found a real vulnerability. Removed the three genuine dead-code items they flagged (the unused `PRICE_SCALE` constant in `PythChainlinkOracle`, and the unused `InsufficientBalance` and `NotImplementedYet` errors in `ILendingMarket`). Every other flag is a documented false positive of the oracle-push architecture: the reentrancy detectors fire on `absorb`/`_withdrawBase`/`_withdrawCollateral` because state is written after the price push, but the push is on the immutable oracle and every entry point is `nonReentrant`; the arbitrary-send-eth flag is the refund of the caller's own unspent `msg.value` to `msg.sender`; the Pyth-unchecked-confidence flag misses the confidence check a few lines below `getPriceUnsafe`. Suppressed those inline with justification comments (keeping the detectors globally active), added `slither.config.json` excluding the intentional style/environment detectors (naming, timestamp, low-level-calls, calls-loop, unused-return, etc.) with the rationale documented in the new [Static Analysis](./tests/14-static-analysis.md) triage page. Slither now reports 0 results. `report.md` (Aderyn output) gitignored. 250 tests still green |

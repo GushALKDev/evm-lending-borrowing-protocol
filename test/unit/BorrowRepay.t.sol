@@ -392,6 +392,19 @@ contract BorrowRepayTest is Test {
         assertEq(market.borrowBalanceOf(alice), 0, "position closed despite passing through dust");
     }
 
+    /// @dev A partial repay is health-improving and is never blocked, even when it leaves the debt
+    ///      below minBorrow: refusing it would stop a borrower with too little base to close from
+    ///      reducing their exposure (INV-9). INV-10 binds only the borrow branch of withdraw.
+    function test_minBorrow_doesNotBlockAPartialRepayIntoTheDustBand() public {
+        _postReferenceCollateral();
+        _borrow(150e6);
+
+        vm.prank(alice);
+        market.supply(address(base), 100e6);
+
+        assertEq(market.borrowBalanceOf(alice), 50e6, "debt left below minBorrow by a repay");
+    }
+
     /*//////////////////////////////////////////////////////////////
                            REPAY PATH (4.4)
     //////////////////////////////////////////////////////////////*/

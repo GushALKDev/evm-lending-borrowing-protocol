@@ -27,6 +27,8 @@ Plus one rate-model site:
 | :------------------------------- | :-------------- | :----------------------------------------------------------------------------------------------------- |
 | Supply rate floor                | removed         | [`testFuzz_interestSplit_supplyRateIsFloored`](../../test/fuzz/InterestRateModel.t.sol#L92)           |
 
+Plus the stateful checks of roadmap 8.11, listed with their mutants in the [invariant suite](./12-invariant.md#falsification). One of them is the stateful counterpart of the finding below: a flipped `presentValueBorrow` survives the live-index round trip by construction and is caught only by the exact per-operation reserve table.
+
 ---
 
 ## The Finding That Shaped the Suite

@@ -549,8 +549,8 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         // exactly the position the account is left holding.
         if (newPrincipal < 0) {
             // Dust guard: a debt too small to be worth absorbing must never be created. The bound is
-            // on the resulting debt, not on the borrowed amount, so it also catches a repay that
-            // would leave dust behind.
+            // on the resulting debt, not on the borrowed amount, so it also catches a supply-to-debt
+            // crossing that would land in the dust band. Repays are not guarded: they only improve health.
             uint256 borrowPV = _presentValueBorrow(_borrowPart(newPrincipal));
             if (borrowPV < MIN_BORROW) revert MinBorrowNotMet(borrowPV, MIN_BORROW);
 
