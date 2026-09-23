@@ -32,7 +32,7 @@
 |                     | Solady (`FixedPointMathLib`, `SafeCastLib`)       | `mulDivDown`/`mulDivUp` for directed rounding, cheap safe casts |
 | **Oracle SDK**      | Pyth Solidity SDK                                 | `updatePriceFeeds`, price struct decoding                      |
 | **Standards**       | ERC-20 (the market itself is the rebasing token)  | [Guide 3, ADR-5](./03-architecture.md#adr-5-signed-principal-and-rebasing-erc20) |
-| **Linters**         | Solhint + Prettier (solidity plugin)              | CI-enforced formatting                                          |
+| **Linters**         | Solhint + `forge fmt`                             | CI-enforced lint and formatting (`forge fmt --check`)           |
 
 Contract layout:
 
