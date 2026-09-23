@@ -1,7 +1,7 @@
 # Oracle: Pyth + Chainlink (Phase 5)
 
-**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (28 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration)
-**Covers:** roadmap items 5.1 to 5.10 · [Guide 3, Section 5](../03-architecture.md#5-oracle-system-pyth--chainlink)
+**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (28 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration) · [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (4 integration)
+**Covers:** roadmap items 5.1 to 5.10, 8.10 · [Guide 3, Section 5](../03-architecture.md#5-oracle-system-pyth--chainlink)
 
 ---
 
@@ -131,3 +131,16 @@ The real oracle wired into a real market, proving the payable price path end to 
 | [`test_borrowRevertsWhenUnderfunded`](../../test/integration/OracleMarketBorrow.t.sol#L136) | A borrow with `msg.value = 0` reverts: it cannot cover even the first per-asset Pyth fee |
 
 > **The `receive()` gap.** The market forwards `address(this).balance` to the oracle once per asset; the real oracle consumes only the fee and refunds the surplus *back to the market* for its next per-asset call. The Phase 4 market had no `receive()`, so the refund reverted `RefundFailed` — a latent bug the mock never surfaced because Phase 4 tests sent no ETH and the mock only refunds when `msg.value > 0`. This integration test is what caught it; the fix is a `receive()` on the market. No other market change was needed: the `IPriceOracle` shape is unchanged, so `_pushPrices` and `_refundExcessValue` were already correct.
+
+## Liquidation integration (8.10)
+
+The same real oracle behind the two liquidation entry points. Nothing else reaches them with a real fee: the fork suite cannot move a price with a cached VAA, and every other layer prices through `MockPriceOracle`, which charges nothing. Alice borrows 15,000 USDC against 10 WETH at $2,000; each test crashes WETH to $1,700 with a fresh signed Pyth update one second later plus a matching Chainlink anchor, so liquidation capacity drops to `10 * 1,702 * 85% = $14,467` and only the absorb's own push makes her eligible. Rates are zeroed so every settlement amount is exact.
+
+| Test | Asserts |
+| :--- | :------ |
+| [`test_absorbAgainstRealOracle_seizesSettlesAndRefunds`](../../test/integration/OracleMarketLiquidation.t.sol#L138) | Before the push, `isLiquidatable` reverts `PriceDeviationTooHigh` (stored $2,000 Pyth against the $1,700 anchor, 1,764 bps), so only the absorb's own update prices her. Credit `10 * 1,700 * 93% = 15,810` against 15,000 debt: debt wiped, 810 USDC surplus credited as supply, 10 WETH moved to seized inventory, reserves down by exactly 15,810; only `4 wei` of Pyth fee consumed, and market and oracle hold no ETH |
+| [`test_absorbRevertsWhenUnderfunded`](../../test/integration/OracleMarketLiquidation.t.sol#L165) | `absorb` with `msg.value = 0` reverts `InsufficientFee(0, 2)` on the first per-asset push |
+| [`test_buyCollateralAgainstRealOracle_sellsInventoryAndRefunds`](../../test/integration/OracleMarketLiquidation.t.sol#L176) | After the absorb, 10,000 USDC buys WETH at the 3.5%-discounted ask of $1,640.50 through `_pushBuyPrices`: collateral received equals the quote, inventory drawn down by it, reserves up by exactly the base paid; only `4 wei` consumed and no ETH retained |
+| [`test_buyCollateralRevertsWhenUnderfunded`](../../test/integration/OracleMarketLiquidation.t.sol#L203) | `buyCollateral` with `msg.value = 0` reverts `InsufficientFee(0, 2)` |
+
+> **Mutation check.** Removing `_refundExcessValue()` from `absorb` and `buyCollateral` fails three of the four tests (the spent-ETH assertions, and the underfunded buy, which the stranded absorb budget then silently funds).

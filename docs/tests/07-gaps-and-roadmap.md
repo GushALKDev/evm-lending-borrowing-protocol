@@ -7,11 +7,13 @@
 
 ## Open Gaps at Phase 8 (in progress)
 
-The PoC is at 97% (68 of 70 items across phases 0-8; Phase 9 is post-PoC and excluded). Two Phase 8 items remain open.
+The PoC is at 96% (69 of 72 items across phases 0-8; Phase 9 is post-PoC and excluded). Three Phase 8 items remain open.
 
-**The audit checklist and internal line-by-line review are not done (roadmap 8.10).** The checklist lives in [Guide 6, Section 7](../06-security.md#7-testing-plan); completing it and the manual review is the last verification gate before the PoC is declared closed.
+**The invariant suite does not yet assert everything Guide 6 promises (roadmap 8.11).** INV-3 at the live indexes, INV-8, INV-10, INV-14, the per-operation reserve table, absorb-only-when-liquidatable, and revert-reason allowlisting in the handler.
 
-**Findings remediation and a final full-suite re-run (roadmap 8.11)** follow 8.10 and depend on whatever it surfaces.
+**The audit checklist and internal line-by-line review are not done (roadmap 8.12).** The checklist lives in [Guide 6, Section 6](../06-security.md#6-audit-checklist); completing it and the manual review is the last verification gate before the PoC is declared closed.
+
+**Findings remediation and a final full-suite re-run (roadmap 8.13)** follow 8.12 and depend on whatever it surfaces.
 
 ### Deliberately unreachable, kept as defensive guards
 
@@ -27,7 +29,7 @@ These are not gaps to close; they are the reason branch coverage sits just under
 
 ### Phase 8 — Invariant, fork, static analysis, quote fuzz (in progress)
 
-The invariant suite ([inventory](./12-invariant.md)) drives the market through 100,000 bounded random calls per run with `fail_on_revert = false`, asserting INV-1/2/4/5/6/7/9/11 after every step against the **real** `InterestRateModel`. On its first full run it found a critical self-transfer minting bug. The [fork suite](./13-fork.md) replays a cached Hermes VAA through the real `updatePriceFeeds` fee/refund path and real Chainlink `latestRoundData`, exercising the lifecycle against real USDC and WETH (absorb/buyCollateral are excluded on the fork and stay covered at unit/fuzz/invariant level — see the fork inventory for why). [Static analysis](./14-static-analysis.md) (Slither + Aderyn) is clean, with every false positive triaged. Coverage is above 95% on all four columns for every contract (8.9). The storefront quote now carries per-site directed-rounding fuzz ([`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol), roadmap 8.5), pinning `quoteCollateral` against its exact floored value where the AbsorbLiquidation round trip could survive a flipped direction. The local end-to-end lifecycle (roadmap 8.6) runs supply → borrow → warp → repay → absorb → buyCollateral in one sequence on a production `LendingMarket` against a `MockPriceOracle` ([`FullLifecycleTest`](../../test/integration/FullLifecycle.t.sol)), and [`DeployScriptTest`](../../test/integration/DeployScript.t.sol) rehearses [`Deploy.s.sol`](../../script/Deploy.s.sol) against real deployed dependencies exported into its environment vars — the reproducible form of a deploy rehearsal.
+The invariant suite ([inventory](./12-invariant.md)) drives the market through 100,000 bounded random calls per run with `fail_on_revert = false`, asserting INV-1/2/4/5/6/7/9/11 after every step against the **real** `InterestRateModel`. On its first full run it found a critical self-transfer minting bug. The [fork suite](./13-fork.md) replays a cached Hermes VAA through the real `updatePriceFeeds` fee/refund path and real Chainlink `latestRoundData`, exercising the lifecycle against real USDC and WETH (absorb/buyCollateral are excluded on the fork and stay covered at unit/fuzz/invariant level — see the fork inventory for why). [Static analysis](./14-static-analysis.md) (Slither + Aderyn) is clean, with every false positive triaged. Coverage is above 95% on all four columns for every contract (8.9). The storefront quote now carries per-site directed-rounding fuzz ([`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol), roadmap 8.5), pinning `quoteCollateral` against its exact floored value where the AbsorbLiquidation round trip could survive a flipped direction. The local end-to-end lifecycle (roadmap 8.6) runs supply → borrow → warp → repay → absorb → buyCollateral in one sequence on a production `LendingMarket` against a `MockPriceOracle` ([`FullLifecycleTest`](../../test/integration/FullLifecycle.t.sol)), and [`DeployScriptTest`](../../test/integration/DeployScript.t.sol) rehearses [`Deploy.s.sol`](../../script/Deploy.s.sol) against real deployed dependencies exported into its environment vars — the reproducible form of a deploy rehearsal. [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (roadmap 8.10) closes the one payable path nothing else reached: `absorb` and `buyCollateral` through the real `PythChainlinkOracle` with a real Pyth fee, asserting the exact fee consumed and the refund sweep ([inventory](./09-oracle.md#liquidation-integration-810)).
 
 ### Phase 7 — Reserves & protocol management
 

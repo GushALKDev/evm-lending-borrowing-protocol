@@ -19,7 +19,7 @@
 | **[Unit: Supply & Withdraw](./03-unit-supply-withdraw.md)** | Phase 3 surface: base and collateral flows, ERC20, pause flags, constructor validation |
 | **[Unit: Interest Rate Model](./04-unit-rate-model.md)** | Phase 2: the curve in isolation and wired into market accrual, accrual overflow bounds |
 | **[Unit + Fuzz: Borrow & Repay](./08-unit-borrow-repay.md)** | Phase 4: sign crossings, capacity boundaries, the dust guard, accrue-before-action |
-| **[Oracle](./09-oracle.md)**                   | Phase 5: the Pyth+Chainlink validation pipeline, normalization, fee/refund, and the market integration |
+| **[Oracle](./09-oracle.md)**                   | Phase 5: the Pyth+Chainlink validation pipeline, normalization, fee/refund, and the market integration; Phase 8: absorb and buyCollateral through the real oracle |
 | **[Absorb Liquidation](./10-absorb-liquidation.md)** | Phase 6: eligibility at price + conf, the three absorb settlements, the storefront quote, buyCollateral, and the round-trip reserve bound |
 | **[Protocol Management](./11-protocol-management.md)** | Phase 7: withdrawReserves bounds, owner/guardian role separation, and the constructor revert matrix including INV-13 |
 | **[Invariant Suite](./12-invariant.md)** | Phase 8: the StdInvariant handler and INV-1/2/4/5/6/7/9/11 across sequences; the self-transfer minting bug it found |
@@ -33,7 +33,7 @@
 
 ## 📊 Current Status
 
-**265 tests, all green** (Phase 8 in progress: invariant suite live, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, and the full local lifecycle plus a deploy-script rehearsal; INV-1 caught a self-transfer minting bug).
+**269 tests, all green** (Phase 8 in progress: invariant suite live, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
@@ -54,11 +54,12 @@
 | [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) | Fuzz | 2 | 6     |
 | [`QuoteRoundingTest`](../../test/fuzz/QuoteRounding.t.sol)            | Fuzz  |     3 | 8     |
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
+| [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) | Integration | 4 | 8 |
 | [`FullLifecycleTest`](../../test/integration/FullLifecycle.t.sol)     | Integration | 1 | 8 |
 | [`DeployScriptTest`](../../test/integration/DeployScript.t.sol)       | Integration | 1 | 8 |
 | [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 8 | 8 |
 | [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 2 | 8 |
-| **Total**                                                            |       | **265** |     |
+| **Total**                                                            |       | **269** |     |
 
 ### Coverage
 
