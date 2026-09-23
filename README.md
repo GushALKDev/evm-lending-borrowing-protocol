@@ -156,7 +156,7 @@ forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast
 ## 🧪 Testing
 
 ```bash
-# Unit tests
+# Full suite (unit, fuzz, invariant, integration; fork tests no-op without FORK_RPC_URL)
 forge test
 
 # Fuzz tests (more runs)
@@ -210,7 +210,8 @@ evm-lending-borrowing-protocol/
 │   ├── 03-architecture.md       # Guide 3: System design
 │   ├── 04-tradeoffs.md          # Guide 4: Risks & solutions
 │   ├── 05-implementation.md     # Guide 5: Solidity interfaces
-│   └── 06-security.md           # Guide 6: Security analysis
+│   ├── 06-security.md           # Guide 6: Security analysis
+│   └── tests/                   # Testing docs: per-test inventory, invariant coverage map
 ├── src/                         # Smart contracts
 │   ├── LendingMarket.sol        # Singleton market (accounting + custody + ERC20)
 │   ├── InterestRateModel.sol    # Kinked curve, derived supply rate
@@ -220,8 +221,9 @@ evm-lending-borrowing-protocol/
 │   ├── unit/                    # Unit tests
 │   ├── fuzz/                    # Fuzz tests
 │   ├── invariant/               # Invariant tests
-│   ├── integration/             # End-to-end tests (local, mocked oracles)
-│   └── fork/                    # Mainnet-fork tests (live Pyth/Chainlink, real tokens)
+│   ├── integration/             # End-to-end tests (local; real oracle over MockPyth for the payable paths)
+│   ├── fork/                    # Mainnet-fork tests (real Pyth/Chainlink via a cached VAA, real tokens)
+│   └── mocks/                   # Harness, mock tokens, oracles, and rate model
 ├── script/                      # Deployment scripts
 ├── LICENSE                      # MIT License
 └── README.md
@@ -243,11 +245,12 @@ This project showcases advanced smart contract development skills through **orig
 - [x] Full ADR record for every non-obvious decision
 - [x] Threat model, 14 system invariants, and a unit, fuzz, invariant, and fork testing plan (fork-tested oracle and token integration)
 
-**Implementation (Pending - see [ROADMAP](./docs/ROADMAP.md)):**
+**Implementation (Phase 8, the last PoC phase, see [ROADMAP](./docs/ROADMAP.md)):**
 
-- [ ] Core contracts (LendingMarket, InterestRateModel, PythChainlinkOracle)
-- [ ] Full test pyramid: unit, fuzz, invariant, integration, and fork (oracle and token integration)
-- [ ] Deployment scripts and audit-prep pass
+- [x] Core contracts (LendingMarket, InterestRateModel, PythChainlinkOracle)
+- [x] Full test pyramid: unit, fuzz, invariant, integration, and fork (oracle and token integration), 277 tests with coverage above 95% on every contract
+- [x] Deployment script, static analysis (Slither, Aderyn), and mutation checks on every rounding site
+- [ ] Audit checklist, internal line-by-line review, and findings remediation
 
 ---
 

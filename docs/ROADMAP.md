@@ -344,7 +344,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 - [x] **8.1** Invariant: cash conservation via ghost tracking: `baseToken.balanceOf(market)` equals the net of every recorded inflow and outflow (no value moves without an accounting entry)
 - [x] **8.2** Invariant: `sum(user principals) == totalSupplyBase - totalBorrowBase` split by sign, exact integer equality
-- [x] **8.3** Invariant: index monotonicity, `supplyRate <= borrowRate`, reserves never decrease except by `absorb` shortfall/penalty timing or `withdrawReserves`
+- [x] **8.3** Invariant: index monotonicity, `supplyRate <= borrowRate` (for `U <= 1e18`, the INV-14 domain), reserves never decrease except by `absorb` shortfall/penalty timing or `withdrawReserves`
 - [x] **8.4** Invariant: no handler action leaves an account below the borrow threshold; collateral totals match per-user sums
 - [x] **8.5** Fuzz: all conversion, rate, and quote math with directed-rounding assertions (rounding always favors the protocol)
 - [x] **8.6** End-to-end integration tests on a local deployment: full lifecycle (supply, borrow, warp, repay, absorb, buyCollateral) on a production `LendingMarket` priced by `MockPriceOracle`, plus a deployment script rehearsal (`Deploy.s.sol` run in-test against deployed dependencies exported into its env vars)
@@ -370,9 +370,9 @@ Each phase should be completed before moving to the next. Within each phase, the
 > kink, the jump rate, and `U > 1` were never exercised; rebalanced to a 100k seed, sequences now reach
 > utilization above 100% with every spec invariant holding. That exposed one pre-existing test
 > assertion stronger than the spec (INV-2's `borrowIndex >= supplyIndex`, false above `U = 1/(1-RF)`),
-> now removed. Adding INV-10 also surfaced that Guide 6 stated
-> it over "any user-initiated action", which the design never enforced: repays are deliberately not
-> dust-guarded. Guide 6 and the Phase 4 note above now state the enforced form.
+> now removed. Adding INV-10 also surfaced that Guide 6 stated it over "any user-initiated action",
+> which the design never enforced: repays are deliberately not dust-guarded. Guide 6 and the Phase 4
+> note above now state the enforced form.
 
 **Deliverables:**
 
@@ -406,6 +406,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-09-23 | README and docs index brought to the Phase 8 state: the README implementation checklist (still marked pending), project tree (`test/mocks`, `docs/tests`), fork and test-command descriptions; the docs index status (it still read Phase 4, 169 tests, 76 items) and its testing tree (files 09-14). Item 8.3 now states the `U <= 1e18` domain of `supplyRate <= borrowRate` |
 | 2026-09-23 | Removed Prettier from the toolchain: its Solidity plugin rewrites one-line signatures in a way `forge fmt --check` (the formatter CI enforces) rejects, so the two formatters could not coexist. Dropped the `format` scripts, both devDependencies, `.prettierrc`, and `.prettierignore`; `forge fmt` is the only Solidity formatter |
 | 2026-09-23 | Documentation synced with the code: README invariant and fork commands fixed (`InvariantsTest`, `FORK_RPC_URL`), fork and local-deploy descriptions corrected (the deploy script's placeholder defaults have no code, so every address must be exported first, and its NatSpec said otherwise), Guide 6 Section 7 rewritten to what the integration, fork, static-analysis, and coverage layers actually run, the `foundry.toml` deep-profile comment no longer cites a CI job that does not exist, and the missing 8.5/8.6 changelog entries backfilled |
 | 2026-09-23 | Phase 8 invariant suite completion (8.11): the handler now latches the per-operation reserve table of Guide 2 Section 6 exactly (supply, repay, withdraw, borrow, and transfer never lower reserves; collateral moves leave them unchanged; `buyCollateral` raises them by exactly the base paid; `absorb` never raises them; `withdrawReserves` lowers them by exactly the amount), INV-10 on the borrow branch, and absorb eligibility in both directions, and every `catch {}` became a revert-reason allowlist of the market's declared errors. New global invariants: INV-3 at the live indexes, INV-8 (the WETH cap lowered to 500 so the bound is actually reached), INV-14 at the live utilization. Probes showed utilization never passed 10% under the old 10M seed, so the seed drops to 100k and `supplyBase` to 50k per call; sequences now reach utilization above 100%, which falsified a pre-existing INV-2 assertion (`borrowIndex >= supplyIndex`) that Guide 6 never states and that is false above `U = 1/(1-RF)`; it was removed and the stateful INV-14 restricted to the promised `U <= 1e18` domain. 15 invariants green over 1.5M calls with no undeclared revert; eight targeted mutants each fail the matching invariant (a flipped `presentValueBorrow` passes the live-index INV-3 by construction and is caught by the reserve table). INV-10 restated in Guide 6 to the enforced form (repays are never dust-guarded), pinned by a new unit test, and the Phase 4 note and `_withdrawBase` comment corrected. Regenerated 83 drifted test line anchors across the testing docs. 277 total green |

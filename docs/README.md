@@ -11,7 +11,7 @@
 | :-------------------------- | :--------------------------------- | :---------- |
 | **[README](../README.md)**  | Project overview and setup         | ✅ Complete |
 | **[ROADMAP](./ROADMAP.md)** | Implementation phases and progress | ✅ Complete |
-| **[Testing](./tests/README.md)** | Test inventory and invariant coverage | 🔄 Phase 4 |
+| **[Testing](./tests/README.md)** | Test inventory and invariant coverage | 🔄 Phase 8 |
 | **[LICENSE](../LICENSE)**   | MIT License                        | ✅ Complete |
 
 ---
@@ -76,7 +76,7 @@
     - Test-by-test inventory, every entry linked to its code
     - Invariant coverage map: which test asserts each of INV-1 to INV-14
     - Mutation checks, including the flipped rounding a round trip failed to catch
-    - Current status (169 tests, coverage) and the gaps each remaining phase closes
+    - Current status (277 tests, coverage) and the gaps each remaining phase closes
 
 ---
 
@@ -85,7 +85,7 @@
 ```
 docs/
 ├── README.md                    # This file
-├── ROADMAP.md                   # Implementation roadmap (10 phases, 76 items)
+├── ROADMAP.md                   # Implementation roadmap (72 PoC items + 6 future work)
 │
 ├── 01-fundamentals.md           # Start here
 ├── 02-mathematics.md            # Core formulas and rounding policy
@@ -103,7 +103,13 @@ docs/
     ├── 05-fuzz.md               # Rounding, monotonicity, rate properties
     ├── 06-mutation-checks.md    # Which mutants each test catches
     ├── 07-gaps-and-roadmap.md   # What is not covered yet
-    └── 08-unit-borrow-repay.md  # Phase 4 borrow/repay surface + capacity fuzz
+    ├── 08-unit-borrow-repay.md  # Phase 4 borrow/repay surface + capacity fuzz
+    ├── 09-oracle.md             # Phase 5 oracle pipeline + real-oracle market integration
+    ├── 10-absorb-liquidation.md # Phase 6 absorb, storefront, buyCollateral
+    ├── 11-protocol-management.md  # Phase 7 reserves, roles, constructor matrix
+    ├── 12-invariant.md          # Phase 8 invariant suite and its mutation checks
+    ├── 13-fork.md               # Phase 8 mainnet-fork tests
+    └── 14-static-analysis.md    # Phase 8 Slither + Aderyn triage
 ```
 
 ---
@@ -140,9 +146,9 @@ docs/
 
 ## 📊 Progress Tracking
 
-See [ROADMAP.md](./ROADMAP.md) for detailed implementation progress across 10 phases and 76 trackable items.
+See [ROADMAP.md](./ROADMAP.md) for detailed implementation progress across 10 phases: 72 PoC items plus 6 post-PoC Future Work items.
 
-**Current Status:** Phase 4 (Borrow & Repay) - Complete ✅ · 169 tests green, [inventory here](./tests/README.md)
+**Current Status:** Phase 8 (Invariant & Fuzz Testing + Audit Prep) in progress · 70 of 72 PoC items (97%), only the audit checklist and its remediation left · 277 tests green, [inventory here](./tests/README.md)
 
 ---
 
