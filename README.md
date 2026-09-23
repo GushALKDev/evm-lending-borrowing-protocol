@@ -85,7 +85,7 @@ Comprehensive documentation is available in [`/docs`](./docs/):
 | Document                                                       | Description                                  |
 | :-------------------------------------------------------------- | :--------------------------------------------- |
 | **[📋 Complete Index](./docs/README.md)**                      | Master index - start here                    |
-| **[🗺️ Roadmap](./docs/ROADMAP.md)**                            | Implementation phases & progress (76 items)  |
+| **[🗺️ Roadmap](./docs/ROADMAP.md)**                            | Implementation phases & progress (72 PoC items + 6 future work) |
 | **[📖 Guide 1: Fundamentals](./docs/01-fundamentals.md)**      | Money markets & the single-base model        |
 | **[🧮 Guide 2: Mathematics](./docs/02-mathematics.md)**        | Indexes, rates, liquidation, rounding policy |
 | **[🏗️ Guide 3: Architecture](./docs/03-architecture.md)**      | Contracts, state, flows, ADRs                |
@@ -141,9 +141,15 @@ forge coverage
 # Start local node
 anvil
 
-# Deploy to local node
+# Deploy to local node. Every external address must point at a deployed contract first: the
+# placeholder defaults have no code, so the market constructor reverts without them.
+export USDC=<addr> WETH=<addr> WBTC=<addr> PYTH=<addr>
+export USDC_CL_FEED=<addr> WETH_CL_FEED=<addr> WBTC_CL_FEED=<addr>
+export USDC_PYTH_ID=<id> WETH_PYTH_ID=<id> WBTC_PYTH_ID=<id>   # optional: OWNER, GUARDIAN
 forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast
 ```
+
+`test/integration/DeployScript.t.sol` rehearses this exact flow in-test, against mock dependencies exported into the same variables.
 
 ---
 
@@ -157,19 +163,19 @@ forge test
 forge test --fuzz-runs 10000
 
 # Invariant tests
-forge test --match-contract InvariantTest
+forge test --match-contract InvariantsTest
 
-# Integration tests (local deployment, mocked oracle stack)
+# Integration tests (local deployment; real oracle over MockPyth for the payable paths)
 forge test --match-path "test/integration/*"
 
-# Fork tests (fork-tested oracle and token integration; needs a mainnet RPC)
-forge test --match-path "test/fork/*" --fork-url $MAINNET_RPC_URL
+# Fork tests (real Pyth, Chainlink, USDC, WETH; without FORK_RPC_URL they no-op green)
+FORK_RPC_URL=<eth-mainnet-rpc> forge test --match-path "test/fork/*"
 
 # Coverage report
 forge coverage --report lcov
 ```
 
-> **On fork testing:** the fork suite validates this protocol's **real external dependencies** on a mainnet fork: the `PythChainlinkOracle` against the live Pyth pull contract and live Chainlink feeds, and the market flows against the real USDC, WETH, and wBTC contracts. This protocol is **not** a fork of any lending protocol; the lending logic is original and self-contained, and is covered by the unit, fuzz, and invariant suites.
+> **On fork testing:** the fork suite validates this protocol's **real external dependencies** on a mainnet fork: the `PythChainlinkOracle` against the real Pyth pull contract (replaying a cached Hermes VAA) and the real Chainlink feeds, and supply, borrow, accrual, and repay against the real USDC and WETH contracts at a pinned block. `absorb`/`buyCollateral` and wBTC are out of scope on the fork for the reasons in [Fork Tests](./docs/tests/13-fork.md#what-is-deliberately-out-of-scope-and-why); the liquidation paths run through the real oracle in the integration suite instead. This protocol is **not** a fork of any lending protocol; the lending logic is original and self-contained, and is covered by the unit, fuzz, and invariant suites.
 
 ### Key Invariants
 

@@ -38,7 +38,7 @@ runs = 64
 runs = 16
 depth = 32
 
-# Pre-merge depth, used by the CI deep job.
+# Pre-merge depth, run locally with FOUNDRY_PROFILE=deep (CI runs the default profile).
 [profile.deep.fuzz]
 runs = 10000
 

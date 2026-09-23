@@ -13,8 +13,9 @@ import {PythChainlinkOracle} from "../src/PythChainlinkOracle.sol";
  * @notice Immutable deployment of the full market: rate model, oracle, and the market itself, wired
  *         for a USDC base with WETH and wBTC collateral.
  * @dev Every external address (tokens, Pyth, Chainlink feeds) and every Pyth feed id is read from the
- *      environment with a zero/placeholder default, so the script runs on a local node out of the box
- *      and takes real addresses on a testnet or fork by exporting the vars. The reference risk and
+ *      environment. The placeholder defaults have no code behind them, so the market constructor's
+ *      decimals() read reverts on a bare run: export real addresses first, on a local node as on a
+ *      testnet or fork (DeployScriptTest rehearses exactly that). The reference risk and
  *      curve parameters come from Guide 2, Section 11. Nothing here is mutable post-deployment.
  */
 contract Deploy is Script {

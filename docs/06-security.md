@@ -313,10 +313,10 @@ Four layers, mapping directly to [ROADMAP Phase 8](./ROADMAP.md#phase-8-invarian
 
 ### Integration testing (local, mocked oracle stack)
 
-- Deploy the full stack (market, rate model, oracle) on a local anvil node with the Phase 5 mocks: a Pyth mock honoring the SDK interfaces and `MockChainlinkFeed` aggregators
-- End-to-end lifecycle: supply, borrow, warp, repay with real accrual; absorb + buyCollateral through the payable price-update path, including the fee refund
-- Adversarial feed states exercised through mock configuration: stale publish times, confidence beyond `MAX_CONFIDENCE_BPS`, anchor deviation beyond `MAX_DEVIATION_BPS`, mixed decimals (`1e18` WETH vs `1e8` wBTC)
-- Rehearse the deployment script itself ([Guide 5, Section 7](./05-implementation.md#7-pre-deployment-checklist)) on the local node before sign-off
+- End-to-end lifecycle on a production market: supply, borrow, warp, repay with real accrual, then absorb and buyCollateral, priced by `MockPriceOracle` so the market's state machine is driven with prices as a controlled input
+- The payable price-update path against the real `PythChainlinkOracle` over the SDK's fee-charging `MockPyth` and `MockChainlinkFeed` anchors: borrow, absorb, and buyCollateral with `msg.value > 0`, asserting the exact fee consumed, the surplus refund, and that neither market nor oracle retains ETH
+- Adversarial feed states exercised through mock configuration in the oracle suite: stale publish times, confidence beyond `MAX_CONFIDENCE_BPS`, anchor deviation beyond `MAX_DEVIATION_BPS`, and non-8-decimal anchors; mixed collateral decimals (`1e18` WETH vs `1e8` wBTC) in the capacity suite
+- Rehearse the deployment script in-test against deployed dependencies exported into its environment variables; the broadcast rehearsal on a local node remains an operational step of [Guide 5, Section 7](./05-implementation.md#7-pre-deployment-checklist)
 
 ### Fork testing (mainnet fork, real external dependencies)
 
@@ -330,12 +330,12 @@ Two targets, and only two: the oracle integration and the token integration. Eve
 - Real Chainlink `latestRoundData` with its actual heartbeat and round metadata
 - Staleness, confidence, and deviation checks evaluated against real values rather than hand-set ones
 
-**Tokens (real USDC, WETH, wBTC).** `supply`, `withdraw`, `borrow`, `repay`, `absorb`, and `buyCollateral` exercised against the real mainnet token contracts (USDC as base, WETH and wBTC as collateral), funding accounts via `deal` or impersonation. This catches real-token behavior that `MockERC20` hides: USDC's proxy and 6-decimal semantics, the actual return-value and approval conventions of each token, and per-token transfer behavior on the paths that move value.
+**Tokens (real USDC, WETH).** `supply`, `borrow`, accrual, and `repay` exercised against the real mainnet token contracts (USDC as base, WETH as collateral), funding accounts via `deal`. This catches real-token behavior that `MockERC20` hides: USDC's proxy and 6-decimal semantics, the actual return-value and approval conventions of each token, and per-token transfer behavior on the paths that move value. `absorb`/`buyCollateral` cannot be reached on the fork (a cached VAA cannot move the price, and warping makes it stale) and wBTC is excluded (its Pyth feed at the pinned block fails the real deviation check); see [ROADMAP 8.7](./ROADMAP.md#phase-8-invariant--fuzz-testing--audit-prep).
 
 ### Static analysis and coverage
 
-- Slither + Aderyn in CI, zero unreviewed findings policy
-- `forge coverage` >95% lines and branches on `src/`
+- Slither + Aderyn run locally before each audit gate (Slither config committed in `slither.config.json`), zero unreviewed findings policy, triage recorded in [Static Analysis](./tests/14-static-analysis.md); neither tool runs in CI
+- `forge coverage` >95% lines and branches on `src/`, verified at each phase close and recorded in the [testing docs](./tests/README.md); CI runs coverage as a report, without a threshold gate
 - Mutation-style spot checks on the rounding sites: flip a `mulDivDown` to `mulDivUp` and confirm the suite fails (validates that the tests actually pin the direction)
 
 ---
