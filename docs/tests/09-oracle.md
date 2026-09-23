@@ -30,7 +30,7 @@ The Pyth surface is the SDK's [`MockPyth`](../../lib/pyth-sdk-solidity/MockPyth.
 | [`test_getPrice_normalizesTo1e18`](../../test/unit/PythChainlinkOracle.t.sol#L79) | Pyth `2000e8`, expo `-8` → `2000e18` price and `2e18` conf |
 | [`test_getPrice_positiveExpoScalesUp`](../../test/unit/PythChainlinkOracle.t.sol#L85) | A positive expo scales the mantissa *up*: `20 * 10^2 = 2000` still normalizes to `2000e18` |
 | [`test_chainlink_nonEightDecimalsNormalize`](../../test/unit/PythChainlinkOracle.t.sol#L96) | An 18-decimal anchor at `$2000` anchors identically to the 8-decimal one |
-| [`test_getPrice_revertsOnAnchorOver18Decimals`](../../test/unit/PythChainlinkOracle.t.sol#L356) | A feed reporting more than 18 decimals cannot be normalized: `InvalidConfiguration("decimals")` |
+| [`test_getPrice_revertsOnAnchorOver18Decimals`](../../test/unit/PythChainlinkOracle.t.sol#L358) | A feed reporting more than 18 decimals cannot be normalized: `InvalidConfiguration("decimals")` |
 
 The positive-expo test exists because the target exponent is `18 + expo`: the common case (`expo = -8`) scales down, but the branch that scales up is only reachable with a positive expo and must be pinned separately.
 
@@ -98,14 +98,14 @@ The oracle is immutable policy: no owner, no setters. Every feed is fixed at con
 | [`test_constructor_revertsOnLengthMismatch`](../../test/unit/PythChainlinkOracle.t.sol#L255) | `assets.length == configs.length` |
 | [`test_constructor_revertsOnZeroFeedId`](../../test/unit/PythChainlinkOracle.t.sol#L263) | non-zero Pyth feed id |
 | [`test_constructor_revertsOnDuplicateAsset`](../../test/unit/PythChainlinkOracle.t.sol#L276) | no duplicate asset |
-| [`test_constructor_revertsOnZeroStaleness`](../../test/unit/PythChainlinkOracle.t.sol#L302) | `maxStaleness > 0` |
-| [`test_constructor_revertsOnConfOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L311) | `0 < maxConfidenceBps < 10_000` |
-| [`test_constructor_revertsOnDeviationOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L320) | `0 < maxDeviationBps < 10_000` |
-| [`test_constructor_revertsOnZeroChainlinkFeed`](../../test/unit/PythChainlinkOracle.t.sol#L329) | non-zero anchor address |
-| [`test_constructor_revertsOnZeroHeartbeat`](../../test/unit/PythChainlinkOracle.t.sol#L337) | `heartbeat > 0` |
-| [`test_constructor_revertsOnZeroAsset`](../../test/unit/PythChainlinkOracle.t.sol#L344) | non-zero asset address |
+| [`test_constructor_revertsOnZeroStaleness`](../../test/unit/PythChainlinkOracle.t.sol#L303) | `maxStaleness > 0` |
+| [`test_constructor_revertsOnConfOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L312) | `0 < maxConfidenceBps < 10_000` |
+| [`test_constructor_revertsOnDeviationOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L321) | `0 < maxDeviationBps < 10_000` |
+| [`test_constructor_revertsOnZeroChainlinkFeed`](../../test/unit/PythChainlinkOracle.t.sol#L330) | non-zero anchor address |
+| [`test_constructor_revertsOnZeroHeartbeat`](../../test/unit/PythChainlinkOracle.t.sol#L338) | `heartbeat > 0` |
+| [`test_constructor_revertsOnZeroAsset`](../../test/unit/PythChainlinkOracle.t.sol#L346) | non-zero asset address |
 
-[`test_getFeedConfig_returnsWiring`](../../test/unit/PythChainlinkOracle.t.sol#L365) confirms the stored wiring is readable.
+[`test_getFeedConfig_returnsWiring`](../../test/unit/PythChainlinkOracle.t.sol#L367) confirms the stored wiring is readable.
 
 ---
 

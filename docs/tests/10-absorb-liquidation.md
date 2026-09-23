@@ -65,7 +65,7 @@ Settlement routes through the single accounting path (`_updateBasePrincipal`), s
 | [`test_buyCollateral_revertsWhenReservesAtTarget`](../../test/unit/AbsorbLiquidation.t.sol#L272) | Above `targetReserves` the sale is closed: `NotForSale`. Inventory is only sold when reserves need it |
 | [`test_buyCollateral_slippageGuard`](../../test/unit/AbsorbLiquidation.t.sol#L287) | `quote < minAmount` reverts `TooMuchSlippage` |
 | [`test_buyCollateral_revertsOnInsufficientInventory`](../../test/unit/AbsorbLiquidation.t.sol#L301) | A buy exceeding `getCollateralReserves` reverts `InsufficientInventory` with the seized inventory available |
-| [`test_buyCollateral_pausable`](../../test/unit/AbsorbLiquidation.t.sol#L358) | The `BUY` flag halts sales |
+| [`test_buyCollateral_pausable`](../../test/unit/AbsorbLiquidation.t.sol#L370) | The `BUY` flag halts sales |
 
 `buyCollateral` moves only cash and the physical collateral: the base paid in raises reserves through the derived formula (no principal changes, so no supplier is credited), and the collateral out touches no total. The inventory it may sell is `getCollateralReserves = balanceOf(market) - totalsCollateral`, never user-owned collateral ([Guide 3, ADR-7](../03-architecture.md#adr-7-collateral-total-as-user-claims-vs-whole-pool)). CEI ordering pulls base in before sending collateral out.
 
@@ -73,7 +73,7 @@ Settlement routes through the single accounting path (`_updateBasePrincipal`), s
 
 ## Round-trip reserves (6.8)
 
-[`test_absorbThenSell_neverReducesReservesAtStablePrices`](../../test/unit/AbsorbLiquidation.t.sol#L321) absorbs at 1,760 and sells the full 10 WETH back at the same price, asserting reserves end no lower than before the absorb — the protocol keeps the penalty-minus-discount margin.
+[`test_absorbThenSell_neverReducesReservesAtStablePrices`](../../test/unit/AbsorbLiquidation.t.sol#L333) absorbs at 1,760 and sells the full 10 WETH back at the same price, asserting reserves end no lower than before the absorb — the protocol keeps the penalty-minus-discount margin.
 
 ## Collateral reserves semantics (ADR-7)
 
@@ -81,13 +81,13 @@ These pin the user-claims-only meaning of `totalsCollateral` and the derived-inv
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_buyCollateral_cannotSellUserOwnedCollateral`](../../test/unit/AbsorbLiquidation.t.sol#L375) | **Regression pin.** With a live 10 WETH user claim next to 10 WETH of seized inventory, a buy for 11 WETH (fits the old 20 WETH raw total, exceeds the seized inventory) reverts `InsufficientInventory`; a buy for exactly the seized 10 WETH succeeds and the user still withdraws their full claim |
-| [`test_supplyCap_countsUserClaimsNotSeizedInventory`](../../test/unit/AbsorbLiquidation.t.sol#L418) | After an absorb removes 990 WETH of claims, the cap frees up: a fresh 1,000 WETH deposit is accepted even with 990 WETH of seized inventory custodied. The cap bounds user claims, not the whole pool |
-| [`test_absorbBuyWithdraw_sequenceKeepsUserWhole`](../../test/unit/AbsorbLiquidation.t.sol#L444) | The absorb → buyCollateral → withdrawCollateral path the old semantics made unsafe: draining the seized inventory leaves an untouched user claim fully withdrawable |
+| [`test_buyCollateral_cannotSellUserOwnedCollateral`](../../test/unit/AbsorbLiquidation.t.sol#L387) | **Regression pin.** With a live 10 WETH user claim next to 10 WETH of seized inventory, a buy for 11 WETH (fits the old 20 WETH raw total, exceeds the seized inventory) reverts `InsufficientInventory`; a buy for exactly the seized 10 WETH succeeds and the user still withdraws their full claim |
+| [`test_supplyCap_countsUserClaimsNotSeizedInventory`](../../test/unit/AbsorbLiquidation.t.sol#L430) | After an absorb removes 990 WETH of claims, the cap frees up: a fresh 1,000 WETH deposit is accepted even with 990 WETH of seized inventory custodied. The cap bounds user claims, not the whole pool |
+| [`test_absorbBuyWithdraw_sequenceKeepsUserWhole`](../../test/unit/AbsorbLiquidation.t.sol#L456) | The absorb → buyCollateral → withdrawCollateral path the old semantics made unsafe: draining the seized inventory leaves an untouched user claim fully withdrawable |
 
 ## Pause flags (6.7)
 
-[`test_absorb_pausable`](../../test/unit/AbsorbLiquidation.t.sol#L346) and [`test_buyCollateral_pausable`](../../test/unit/AbsorbLiquidation.t.sol#L358) confirm the guardian's `ABSORB`/`BUY` bits halt each path.
+[`test_absorb_pausable`](../../test/unit/AbsorbLiquidation.t.sol#L358) and [`test_buyCollateral_pausable`](../../test/unit/AbsorbLiquidation.t.sol#L370) confirm the guardian's `ABSORB`/`BUY` bits halt each path.
 
 ---
 
