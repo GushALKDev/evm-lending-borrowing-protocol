@@ -76,6 +76,7 @@ contract Handler is Test {
     mapping(bytes4 => bool) internal expectedError;
 
     uint8 internal constant PAUSE_SUPPLY = 1 << 0;
+    uint8 internal constant PAUSE_WITHDRAW = 1 << 2;
     uint8 internal constant PAUSE_ABSORB = 1 << 3;
     uint8 internal constant PAUSE_BORROW = 1 << 5;
 
@@ -232,7 +233,18 @@ contract Handler is Test {
 
     function withdrawBase(uint256 actorSeed, uint256 amount) external borrowGuard(false) {
         address actor = _actor(actorSeed);
-        amount = bound(amount, 1e6, 500_000e6);
+        if (amount % 4 == 0 && market.getReserves() > 0) {
+            // One call in four, while reserves are positive, is a supplier exit sized to the smaller of
+            // the actor's balance and the cash on hand. A random amount almost never leaves cash at zero,
+            // and draining it while reserves are positive is the only way utilization climbs above 100%.
+            // With reserves at or below zero a drain cannot do that and would only starve borrowers.
+            uint256 balance = market.balanceOf(actor);
+            uint256 cash = base.balanceOf(address(market));
+            amount = balance < cash ? balance : cash;
+            if (amount == 0) return;
+        } else {
+            amount = bound(amount, 1e6, 500_000e6);
+        }
 
         uint256 balBefore = base.balanceOf(actor);
         int256 reservesBefore = market.getReserves();
@@ -383,9 +395,13 @@ contract Handler is Test {
     }
 
     function togglePause(uint256 flagsRaw) external borrowGuard(false) {
-        // AND of two random bytes: each of the six bits is set about a quarter of the time. At one in
-        // two, WITHDRAW and BORROW together left borrowing open too rarely for absorbs to occur.
+        // AND of two random bytes: each of the six bits is set about a quarter of the time. WITHDRAW and
+        // BORROW also need two more bytes, so each is set about a sixteenth of the time, since both stop
+        // borrowing and every borrow-driven state (debt, absorbs, high utilization) depends on it.
         uint8 flags = uint8(flagsRaw & (flagsRaw >> 8) & 63);
+        uint8 stopsBorrowing = PAUSE_WITHDRAW | PAUSE_BORROW;
+        uint8 rare = uint8((flagsRaw >> 16) & (flagsRaw >> 24));
+        flags = (flags & ~stopsBorrowing) | (flags & rare & stopsBorrowing);
         // The owner can both set and clear, so this is the action that lifts pauses.
         vm.prank(owner);
         try market.setPauseFlags(flags) {}
@@ -396,8 +412,15 @@ contract Handler is Test {
 
     /// @dev The guardian can only add flags, so one random flag is OR-ed onto the current set. One flag
     ///      at a time keeps the market from spending most of a run fully paused before the owner clears.
+    ///      A drawn WITHDRAW or BORROW is kept one time in four and otherwise swapped for one of the other
+    ///      four flags: guardian flags last until the owner's next toggle, and those two stop borrowing.
     function guardianPause(uint256 flagRaw) external borrowGuard(false) {
-        uint8 flags = uint8(1 << bound(flagRaw, 0, 5)) | market.getMarketState().pauseFlags;
+        uint8 flag = uint8(1 << bound(flagRaw, 0, 5));
+        if (flag & (PAUSE_WITHDRAW | PAUSE_BORROW) != 0 && (flagRaw >> 8) % 4 != 0) {
+            uint8[4] memory others = [PAUSE_SUPPLY, uint8(1 << 1), PAUSE_ABSORB, uint8(1 << 4)];
+            flag = others[(flagRaw >> 16) % 4];
+        }
+        uint8 flags = flag | market.getMarketState().pauseFlags;
         vm.prank(guardian);
         try market.setPauseFlags(flags) {}
         catch (bytes memory reason) {
