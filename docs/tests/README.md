@@ -33,7 +33,7 @@
 
 ## 📊 Current Status
 
-**331 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
+**331 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis (Slither: 0 findings; Aderyn: 12 detector categories flagged, all triaged in [Static Analysis](./14-static-analysis.md), 4 false positives and 8 intended design, style, or accepted gas choices, none a vulnerability), coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |

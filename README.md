@@ -249,7 +249,7 @@ This project showcases advanced smart contract development skills through **orig
 
 - [x] Core contracts (LendingMarket, InterestRateModel, PythChainlinkOracle)
 - [x] Full test pyramid: unit, fuzz, invariant, integration, and fork (oracle and token integration), 331 tests with coverage above 95% on every contract
-- [x] Deployment script, static analysis (Slither, Aderyn), and mutation checks on every rounding site
+- [x] Deployment script, static analysis, and mutation checks on every rounding site. Slither: 0 findings. Aderyn: 12 detector categories flagged, all triaged (documented in [docs/tests/14-static-analysis.md](./docs/tests/14-static-analysis.md)): 4 are false positives and 8 are intended design, style, or accepted gas choices; none is a vulnerability
 - [ ] Audit checklist, internal line-by-line review, and findings remediation
 
 ---
