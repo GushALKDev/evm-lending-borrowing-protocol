@@ -205,7 +205,10 @@ interface ILendingMarket {
     /**
      * @notice Withdraws base (opening or increasing a borrow past zero) or collateral.
      * @dev Payable: consults the oracle and forwards the update fee only when the action can reduce
-     *      account health. Surplus msg.value is refunded to the caller.
+     *      account health. Surplus msg.value is refunded to the caller. PAUSE_WITHDRAW blocks every
+     *      withdrawal. PAUSE_BORROW (evaluated after accrual) blocks only a base withdrawal that would
+     *      open or increase debt, which reverts whole rather than paying out the positive part, and
+     *      any collateral withdrawal from an account in debt; both revert Paused(PAUSE_BORROW).
      * @param asset Base asset or a listed collateral asset.
      * @param amount Amount in the asset's native decimals.
      * @param priceUpdate Signed oracle update payloads, empty when no price is needed.
@@ -302,6 +305,7 @@ interface ILendingMarket {
     /**
      * @notice Sets the pause bitfield.
      * @dev The owner may set or clear any flag. The guardian may only add flags, never clear them.
+     *      Bits: SUPPLY 1 << 0, TRANSFER 1 << 1, WITHDRAW 1 << 2, ABSORB 1 << 3, BUY 1 << 4, BORROW 1 << 5.
      * @param flags New pause bitfield.
      */
     function setPauseFlags(uint8 flags) external;

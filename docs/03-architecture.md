@@ -109,7 +109,7 @@ graph TD
 | `accrue()`                                                 | Public          | No           | Advance supply and borrow indexes to `block.timestamp`                       |
 | `transfer(to, amount)` / `transferFrom(from, to, amount)`  | Public          | No           | ERC20 transfer of base supply; restricted so the sender never goes negative  |
 | `withdrawReserves(to, amount)`                             | Owner           | No           | Withdraw base reserves to the treasury                                       |
-| `setPauseFlags(flags)`                                     | Owner, Guardian | No           | Granular pause: supply, transfer, withdraw, absorb, buy                      |
+| `setPauseFlags(flags)`                                     | Owner, Guardian | No           | Granular pause: supply, transfer, withdraw, absorb, buy, borrow              |
 
 \* `withdraw` only consults the oracle when the action can reduce account health: opening or increasing a borrow, or withdrawing collateral while debt exists. Withdrawing base down to zero with no debt needs no price.
 
@@ -170,7 +170,7 @@ struct MarketState {
 
 - **Indexes** start at `BASE_INDEX_SCALE = 1e15` and only grow. `uint64` at 1e15 scale overflows above 18,446x growth, unreachable for any sane rate over the market's life.
 - **Totals are stored as principal**, not present value. `totalSupply() = presentValue(totalSupplyBase)` and likewise for borrows. This keeps the global invariant `sum(user principals) == stored totals` an exact integer equality, checkable without any index math.
-- **`pauseFlags`** is a bitfield: `SUPPLY | TRANSFER | WITHDRAW | ABSORB | BUY`, one bit each.
+- **`pauseFlags`** is a bitfield: `SUPPLY | TRANSFER | WITHDRAW | ABSORB | BUY | BORROW`, one bit each (six of the eight bits in use).
 
 ### 3.2 Per-User State
 
@@ -409,7 +409,7 @@ sequenceDiagram
     alt newPrincipal < 0 (borrowing)
         Market->>Oracle: updateAndGetPrice(each asset in assetsIn + base)
         Oracle-->>Market: (price18, conf18) validated
-        Market->>Market: Checks: |newBorrowPV| >= minBorrow,<br/>isBorrowCollateralized at price - conf,<br/>withdraw not paused
+        Market->>Market: Checks: withdraw and borrow not paused,<br/>|newBorrowPV| >= minBorrow,<br/>isBorrowCollateralized at price - conf
     else newPrincipal >= 0 (plain withdrawal)
         Market->>Market: Checks: withdraw not paused, cash sufficient
     end
@@ -423,7 +423,7 @@ sequenceDiagram
 
 ### 6.4 Withdraw Collateral
 
-Same shape as 6.3: `accrue()`, decrement `userCollateral` and `totalsCollateral`, clear the `assetsIn` bit if the balance hits zero, and require `isBorrowCollateralized` (at `price - conf`) only if the account has debt. Transfer out last.
+Same shape as 6.3: `accrue()`, revert `Paused(PAUSE_BORROW)` if borrowing is paused and the account has debt, decrement `userCollateral` and `totalsCollateral`, clear the `assetsIn` bit if the balance hits zero, and require `isBorrowCollateralized` (at `price - conf`) only if the account has debt. Transfer out last.
 
 ### 6.5 Accrue
 
@@ -544,7 +544,7 @@ All base balance changes, in every flow (supply, withdraw, borrow, repay, absorb
 
 ### 7.5 Granular Pausability
 
-Five independent pause bits (`SUPPLY`, `TRANSFER`, `WITHDRAW`, `ABSORB`, `BUY`) instead of a global switch, so an incident response can, for example, halt new deposits while leaving withdrawals and liquidations alive. Pausing deposits stops new exposure only: under `PAUSE_SUPPLY`, anyone can still repay an account in debt (up to its debt) and top up that account's collateral, so a supply pause never strands a borrower while absorb stays live. There is no separate borrow or repay flag: borrowing shares `withdraw` and is gated by `PAUSE_WITHDRAW`, and repaying is the `PAUSE_SUPPLY` exception above. The philosophy of which levers to pull in which scenario is in [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy).
+Six independent pause bits (`SUPPLY`, `TRANSFER`, `WITHDRAW`, `ABSORB`, `BUY`, `BORROW`) instead of a global switch, so an incident response can, for example, halt new deposits while leaving withdrawals and liquidations alive. Pausing deposits stops new exposure only: under `PAUSE_SUPPLY`, anyone can still repay an account in debt (up to its debt) and top up that account's collateral, so a supply pause never strands a borrower while absorb stays live. `PAUSE_BORROW` is the mirror image on the withdraw side: it stops only the withdrawals that add risk, a base withdrawal that would open or increase debt (the whole call reverts, the positive part is not paid out alone) and any collateral withdrawal from an account in debt, and leaves supplier exits, debt-free collateral withdrawals, supply, repay, transfers, absorb, and buyCollateral open. `PAUSE_WITHDRAW` remains the flag that stops every withdrawal. There is no repay flag: repaying is the `PAUSE_SUPPLY` exception above. The philosophy of which levers to pull in which scenario is in [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy).
 
 ---
 

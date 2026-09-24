@@ -82,7 +82,7 @@ contract InvariantsTest is Test {
 
         // Only the handler drives state; target its action functions.
         targetContract(address(handler));
-        bytes4[] memory selectors = new bytes4[](14);
+        bytes4[] memory selectors = new bytes4[](15);
         selectors[0] = handler.supplyBase.selector;
         selectors[1] = handler.withdrawBase.selector;
         selectors[2] = handler.supplyCollateral.selector;
@@ -97,6 +97,7 @@ contract InvariantsTest is Test {
         selectors[11] = handler.supplyBase.selector; // weight supply so the pool stays funded
         selectors[12] = handler.guardianPause.selector;
         selectors[13] = handler.repayWhileSupplyPaused.selector;
+        selectors[14] = handler.togglePause.selector; // weight the owner's toggle so guardian flags get cleared
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 
@@ -324,6 +325,17 @@ contract InvariantsTest is Test {
             handler.repayBlockedWhilePaused(),
             string.concat("repay refused under PAUSE_SUPPLY: ", vm.toString(handler.repayBlockedReason()))
         );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                  NO NEW RISK WHILE PAUSE_BORROW IS SET
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev While PAUSE_BORROW is set, no account's debt grows except through interest accrual, and no
+    ///      indebted account's collateral falls except through absorb. Checked around every handler
+    ///      action on every actor, not only the one that acted.
+    function invariant_noNewRiskWhileBorrowPaused() public view {
+        assertFalse(handler.riskAddedWhileBorrowPaused(), handler.riskAddedViolation());
     }
 
     /*//////////////////////////////////////////////////////////////

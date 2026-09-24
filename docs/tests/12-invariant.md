@@ -1,6 +1,6 @@
 # Invariant Suite (Phase 8)
 
-**Suites:** [`InvariantsTest`](../../test/invariant/Invariants.t.sol) (16 invariants) · [`Handler`](../../test/invariant/Handler.sol)
+**Suites:** [`InvariantsTest`](../../test/invariant/Invariants.t.sol) (17 invariants) · [`Handler`](../../test/invariant/Handler.sol)
 **Covers:** roadmap items 8.1 to 8.4, 8.11 · [Guide 6, Section 2](../06-security.md#2-system-invariants)
 **Config:** `runs = 1000`, `depth = 100`, `fail_on_revert = false` (foundry.toml `[invariant]`)
 
@@ -10,7 +10,7 @@
 
 ## Handler design
 
-One `Handler` contract wraps every mutating function with bounded random inputs, driving a fixed cast: 3 suppliers, 3 borrowers, 1 liquidator, plus owner and guardian. Actions: `supplyBase`, `withdrawBase`, `supplyCollateral`, `withdrawCollateral`, `transferBase`, `absorb`, `buyCollateral`, `withdrawReserves`, `warp` (time jumps up to 30 days, running a pure `accrue`), `movePrice` (oracle steps within and beyond the confidence band), `togglePause` (the owner sets or clears any flag set), `guardianPause` (the guardian adds one flag at a time on top of the current set), and `repayWhileSupplyPaused` (see [below](#repay-under-pause_supply)). Ghost variables track every base inflow/outflow (for INV-5) and the reserves around every action (for INV-4). Per-action properties (the reserve table, INV-9, INV-10, absorb eligibility, a repay refused under `PAUSE_SUPPLY`, undeclared reverts) are latched by the handler right after the action and asserted by a global invariant. The WETH supply cap is 500, low enough that the borrowers' supplies reach it inside a run, so INV-8 is exercised at the bound. Seed liquidity is 100,000 USDC and `supplyBase` is bounded to 50,000 per call, small against the borrowers' capacity, so sequences sweep utilization from zero through the kink to above 100% (see below). The suite uses the **real** `InterestRateModel`, not a rate mock, so INV-4 tests the derived-rate theorem rather than an arbitrary rate.
+One `Handler` contract wraps every mutating function with bounded random inputs, driving a fixed cast: 3 suppliers, 3 borrowers, 1 liquidator, plus owner and guardian. Actions: `supplyBase`, `withdrawBase`, `supplyCollateral`, `withdrawCollateral`, `transferBase`, `absorb`, `buyCollateral`, `withdrawReserves`, `warp` (time jumps up to 30 days, running a pure `accrue`), `movePrice` (oracle steps within and beyond the confidence band), `togglePause` (the owner sets a random flag set over all six bits, each bit on about a quarter of the time, weighted twice so guardian flags get cleared), `guardianPause` (the guardian adds one of the six flags on top of the current set), and `repayWhileSupplyPaused` (see [below](#repay-under-pause_supply)). Ghost variables track every base inflow/outflow (for INV-5) and the reserves around every action (for INV-4). Per-action properties (the reserve table, INV-9, INV-10, absorb eligibility, a repay refused under `PAUSE_SUPPLY`, new risk under `PAUSE_BORROW`, undeclared reverts) are latched by the handler right after the action and asserted by a global invariant. The WETH supply cap is 500, low enough that the borrowers' supplies reach it inside a run, so INV-8 is exercised at the bound. Seed liquidity is 100,000 USDC and `supplyBase` is bounded to 50,000 per call, small against the borrowers' capacity, so sequences sweep utilization from zero through the kink to above 100% (see below). The suite uses the **real** `InterestRateModel`, not a rate mock, so INV-4 tests the derived-rate theorem rather than an arbitrary rate.
 
 ## Invariants asserted
 
@@ -24,14 +24,15 @@ One `Handler` contract wraps every mutating function with bounded random inputs,
 | [`invariant_INV7_bitmapMatchesCollateral`](../../test/invariant/Invariants.t.sol) | An `assetsIn` bit is set iff the account holds a positive collateral balance |
 | [`invariant_INV9_noActionLeavesUndercollateralized`](../../test/invariant/Invariants.t.sol) | No successful health-reducing action leaves the acting account below the line (see note below) |
 | [`invariant_INV11_noDebtWithoutSupply`](../../test/invariant/Invariants.t.sol) | `totalSupplyBase == 0` implies `totalBorrowBase == 0` |
-| [`invariant_INV4_reserveDeltasMatchTheTable`](../../test/invariant/Invariants.t.sol#L241) | Every successful action moved reserves as the [Guide 2 Section 6 table](../02-mathematics.md#6-interest-split-and-reserve-growth) allows, exactly: supply, repay, withdraw, borrow, and transfer `>= 0`; collateral moves `== 0`; `buyCollateral` `== +baseAmount`; `absorb` `<= 0`; `withdrawReserves` `== -amount` |
-| [`invariant_INV3_roundTripsFavorTheProtocolAtLiveIndexes`](../../test/invariant/Invariants.t.sol#L251) | Supply and debt round trips never favor the account at the indexes the sequence actually evolved, on every actor's real balance and debt plus fixed probes |
-| [`invariant_INV8_collateralWithinSupplyCap`](../../test/invariant/Invariants.t.sol#L276) | `totalsCollateral <= supplyCap`, held as a global state since only a capped supply raises the total |
-| [`invariant_INV10_noActionCreatesDustDebt`](../../test/invariant/Invariants.t.sol#L287) | The borrow branch of `withdraw` never leaves the acting account with `0 < debt < minBorrow` (see note below) |
-| [`invariant_INV14_supplyRateAtMostBorrowRate`](../../test/invariant/Invariants.t.sol#L298) | `supplyRate <= borrowRate` at the utilization the sequence produced, within the promised domain `U <= 1e18` |
-| [`invariant_absorbOnlyWhenLiquidatable`](../../test/invariant/Invariants.t.sol#L310) | `absorb` succeeded only on accounts `isLiquidatable` reported eligible, and never refused one it reported eligible |
-| [`invariant_repayAlwaysAvailableWhileSupplyPaused`](../../test/invariant/Invariants.t.sol#L322) | While `PAUSE_SUPPLY` is set, a debtor with tokens and approval can always repay: no repay the handler attempted under the pause reverted (see note below) |
-| [`invariant_everyRevertIsADeclaredError`](../../test/invariant/Invariants.t.sol#L335) | Every handler revert carried one of the 21 allowlisted errors, all declared by `ILendingMarket`: no panic, empty revert, or token error hid as a no-op |
+| [`invariant_INV4_reserveDeltasMatchTheTable`](../../test/invariant/Invariants.t.sol#L242) | Every successful action moved reserves as the [Guide 2 Section 6 table](../02-mathematics.md#6-interest-split-and-reserve-growth) allows, exactly: supply, repay, withdraw, borrow, and transfer `>= 0`; collateral moves `== 0`; `buyCollateral` `== +baseAmount`; `absorb` `<= 0`; `withdrawReserves` `== -amount` |
+| [`invariant_INV3_roundTripsFavorTheProtocolAtLiveIndexes`](../../test/invariant/Invariants.t.sol#L252) | Supply and debt round trips never favor the account at the indexes the sequence actually evolved, on every actor's real balance and debt plus fixed probes |
+| [`invariant_INV8_collateralWithinSupplyCap`](../../test/invariant/Invariants.t.sol#L277) | `totalsCollateral <= supplyCap`, held as a global state since only a capped supply raises the total |
+| [`invariant_INV10_noActionCreatesDustDebt`](../../test/invariant/Invariants.t.sol#L288) | The borrow branch of `withdraw` never leaves the acting account with `0 < debt < minBorrow` (see note below) |
+| [`invariant_INV14_supplyRateAtMostBorrowRate`](../../test/invariant/Invariants.t.sol#L299) | `supplyRate <= borrowRate` at the utilization the sequence produced, within the promised domain `U <= 1e18` |
+| [`invariant_absorbOnlyWhenLiquidatable`](../../test/invariant/Invariants.t.sol#L311) | `absorb` succeeded only on accounts `isLiquidatable` reported eligible, and never refused one it reported eligible |
+| [`invariant_repayAlwaysAvailableWhileSupplyPaused`](../../test/invariant/Invariants.t.sol#L323) | While `PAUSE_SUPPLY` is set, a debtor with tokens and approval can always repay: no repay the handler attempted under the pause reverted (see note below) |
+| [`invariant_noNewRiskWhileBorrowPaused`](../../test/invariant/Invariants.t.sol#L337) | While `PAUSE_BORROW` is set, no account's debt principal grows and no indebted account's collateral falls except through absorb (see note below) |
+| [`invariant_everyRevertIsADeclaredError`](../../test/invariant/Invariants.t.sol#L347) | Every handler revert carried one of the 21 allowlisted errors, all declared by `ILendingMarket`: no panic, empty revert, or token error hid as a no-op |
 
 ### The INV-4 one-wei tolerance
 
@@ -47,13 +48,19 @@ Only `warp` moves time, and it accrues, so every other action runs with `elapsed
 
 ### INV-10 binds the borrow branch only
 
-Guide 6 used to state INV-10 over "any user-initiated action". The design never enforced that: a repay is health-improving, and blocking a partial repay that would leave `0 < debt < minBorrow` would stop a borrower who cannot close from reducing exposure. The dust guard lives only on the borrow branch of `withdraw`, and [`test_minBorrow_doesNotBlockAPartialRepayIntoTheDustBand`](../../test/unit/BorrowRepay.t.sol#L399) pins the repay side. The invariant asserts the enforced form, and Guide 6 now states it.
+Guide 6 used to state INV-10 over "any user-initiated action". The design never enforced that: a repay is health-improving, and blocking a partial repay that would leave `0 < debt < minBorrow` would stop a borrower who cannot close from reducing exposure. The dust guard lives only on the borrow branch of `withdraw`, and [`test_minBorrow_doesNotBlockAPartialRepayIntoTheDustBand`](../../test/unit/BorrowRepay.t.sol#L400) pins the repay side. The invariant asserts the enforced form, and Guide 6 now states it.
 
 ### Repay under PAUSE_SUPPLY
 
 A supply pause must stop new exposure without stranding borrowers, since `absorb` stays live. `repayWhileSupplyPaused` makes that a stateful property instead of a unit example: it picks a borrower with debt, sets `PAUSE_SUPPLY` itself as the guardian (so the property is exercised on every call rather than only when a random toggle lands on it), mints the debt to a random payer (the debtor or a third party) and repays through `supplyTo` either a bounded amount in `[1, debt]` or the full-debt sentinel. Under those preconditions no revert is acceptable, so any revert is latched and `invariant_repayAlwaysAvailableWhileSupplyPaused` fails. The owner then restores the flags that were set before the call, so the rest of the sequence is not left paused.
 
 Adding the two pause actions was checked against the reachability probes of the previous rebalance: a first draft let the guardian OR a random set of flags and left `PAUSE_SUPPLY` on after each repay, and the first successful `absorb` moved from run 107 to run 942. With one guardian flag per call and the flags restored after the repay, temporary probe invariants failed (that is, the state was reached) at run 46 for a successful absorb, run 15 for 450 WETH of the 500 cap, and within the first run for utilization above the kink and above 100%. The success path also feeds INV-5 (the paid amount is a ghost inflow) and the reserve table (a repay never lowers reserves). Falsified by a mutant that reverts every base supply while paused: the invariant failed within its first ten runs with `Paused(1)`.
+
+### No new risk under PAUSE_BORROW
+
+Every handler action runs inside a `borrowGuard` modifier that snapshots the principal and WETH collateral of every actor before the action and, if `PAUSE_BORROW` was set when the action started, latches a violation when any actor's debt principal grew or an indebted actor's collateral fell, unless the action was `absorb`. Principal is the right measure: interest moves the borrow index, never the principal, so accrual cannot trip it. Before the market enforced the flag the invariant failed at run 169 with "debt principal increased"; with the flag it holds. Removing the collateral check fails it with "indebted account's collateral decreased", and checking only existing debt, or only opening debt, fails it with "debt principal increased".
+
+Adding the sixth bit to the toggles first starved the other paths: with each bit set half the time, `WITHDRAW` and `BORROW` together left borrowing open about a quarter of the time, and temporary probes never saw an absorb or `U > 1` in 100,000 calls. `togglePause` now sets each bit about a quarter of the time and has two selector slots. With that, the probes failed (the state was reached) at run 146 for a successful absorb, run 1 for 450 WETH of the cap, run 22 for utilization above the kink, and run 702 for utilization above 100%; the INV-14 reserve-factor mutant, which needs utilization above 91%, still fails at run 90, and the INV-8, INV-10, and absorb-eligibility mutants still fail.
 
 ### Revert-reason allowlist
 
@@ -74,6 +81,8 @@ Each new invariant was checked against a targeted mutant of `src/`, or of the ha
 | Reserve-factor sign flipped in `getSupplyRate` | `invariant_INV14_supplyRateAtMostBorrowRate` (needs utilization above 91%, unreachable before the rebalance) |
 | `NotCollateralized` dropped from the allowlist | `invariant_everyRevertIsADeclaredError` |
 | Every base supply reverts `Paused` while `PAUSE_SUPPLY` is set | `invariant_repayAlwaysAvailableWhileSupplyPaused` |
+| `PAUSE_BORROW` not enforced on collateral withdrawals | `invariant_noNewRiskWhileBorrowPaused` |
+| `PAUSE_BORROW` enforced only on existing debt, not on opening it | `invariant_noNewRiskWhileBorrowPaused` |
 
 A separate probe (temporary invariants asserting that `absorb`, `buyCollateral`, and a borrow never succeed) failed within 65 calls each, confirming the liquidation and borrow paths are reached, not just called.
 

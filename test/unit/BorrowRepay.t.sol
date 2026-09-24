@@ -35,6 +35,7 @@ contract BorrowRepayTest is Test {
     uint128 internal constant WETH_CAP = 1_000e18;
     uint256 internal constant MIN_BORROW = 100e6;
     uint8 internal constant PAUSE_SUPPLY = 1 << 0;
+    uint8 internal constant PAUSE_BORROW = 1 << 5;
 
     /// @dev Capacity of the reference position: 10 WETH * 2,000 USD * 80%.
     uint256 internal constant REFERENCE_CAPACITY_USD = 16_000e18;
@@ -761,6 +762,171 @@ contract BorrowRepayTest is Test {
 
         assertEq(market.borrowBalanceOf(alice), 0, "absorbed while supply is paused");
         assertEq(market.userCollateral(alice, address(weth)), 0, "collateral seized");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+               PAUSE_BORROW: ONLY RISK-ADDING WITHDRAWALS STOP
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Adds PAUSE_BORROW on top of the current flags, as the guardian would.
+    function _pauseBorrow() internal {
+        uint8 flags = market.getMarketState().pauseFlags;
+        vm.prank(guardian);
+        market.setPauseFlags(flags | PAUSE_BORROW);
+    }
+
+    function test_pausedBorrow_openingDebtReverts() public {
+        _postReferenceCollateral();
+        _pauseBorrow();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BORROW));
+        market.withdraw(address(base), 5_000e6, new bytes[](0));
+    }
+
+    function test_pausedBorrow_increasingDebtReverts() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseBorrow();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BORROW));
+        market.withdraw(address(base), 1_000e6, new bytes[](0));
+    }
+
+    /// @dev bob supplies 500,000 and holds no debt: his whole balance is an exit, not a borrow.
+    function test_pausedBorrow_supplierWithdrawsExactlyTheirBalance() public {
+        _pauseBorrow();
+        uint256 balance = market.balanceOf(bob);
+        assertEq(balance, 500_000e6, "reference supplier balance");
+
+        vm.prank(bob);
+        market.withdraw(address(base), balance, new bytes[](0));
+
+        assertEq(market.balanceOf(bob), 0, "supplier fully exited");
+        assertEq(market.getPrincipal(bob), 0, "no debt opened");
+    }
+
+    /// @dev One wei past the balance would cross into debt, so the whole call reverts: the positive
+    ///      part is not paid out on its own. alice adds cash first so the cash bound is not what fires.
+    function test_pausedBorrow_withdrawOfBalancePlusOneWeiReverts() public {
+        vm.prank(alice);
+        market.supply(address(base), 10_000e6);
+        _pauseBorrow();
+        uint256 balance = market.balanceOf(bob);
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BORROW));
+        market.withdraw(address(base), balance + 1, new bytes[](0));
+
+        assertEq(market.balanceOf(bob), balance, "balance untouched");
+    }
+
+    /// @dev A collateralized supplier crossing into debt is refused as well, whatever the size of the
+    ///      debt it would open.
+    function test_pausedBorrow_crossingIntoDebtRevertsWithCollateral() public {
+        _postReferenceCollateral();
+        vm.prank(alice);
+        market.supply(address(base), 1_000e6);
+        _pauseBorrow();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BORROW));
+        market.withdraw(address(base), 3_000e6, new bytes[](0));
+    }
+
+    /// @dev Any collateral withdrawal from an indebted account is refused, even one the health check
+    ///      would accept, and even the account's whole balance of that asset.
+    function test_pausedBorrow_debtorCollateralWithdrawReverts() public {
+        _postReferenceCollateral();
+        _borrow(1_000e6);
+        _pauseBorrow();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BORROW));
+        market.withdraw(address(weth), 1e18, new bytes[](0));
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BORROW));
+        market.withdraw(address(weth), 10e18, new bytes[](0));
+    }
+
+    function test_pausedBorrow_nonDebtorCollateralWithdrawRuns() public {
+        _postReferenceCollateral();
+        _pauseBorrow();
+
+        vm.prank(alice);
+        market.withdraw(address(weth), 10e18, new bytes[](0));
+
+        assertEq(market.userCollateral(alice, address(weth)), 0, "collateral returned");
+    }
+
+    function test_pausedBorrow_repayAndTopUpRun() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseBorrow();
+
+        vm.startPrank(alice);
+        market.supply(address(base), 2_000e6);
+        market.supply(address(weth), 1e18);
+        vm.stopPrank();
+
+        assertEq(market.borrowBalanceOf(alice), 3_000e6, "repaid while borrowing is paused");
+        assertEq(market.userCollateral(alice, address(weth)), 11e18, "topped up while borrowing is paused");
+    }
+
+    function test_pausedBorrow_supplySupplyToAndTransferRun() public {
+        _pauseBorrow();
+
+        vm.startPrank(bob);
+        market.supply(address(base), 1_000e6);
+        market.supplyTo(alice, address(base), 1_000e6);
+        market.transfer(alice, 500e6);
+        vm.stopPrank();
+
+        assertEq(market.balanceOf(bob), 500_500e6, "bob supplied and transferred");
+        assertEq(market.balanceOf(alice), 1_500e6, "alice credited by supplyTo and transfer");
+    }
+
+    /// @dev Liquidation paths reduce risk and stay open. At 1,700 the reference position is absorbable
+    ///      (14,450 USD of liquidation capacity against 15,000), and the seized WETH is then for sale.
+    function test_pausedBorrow_absorbAndBuyCollateralRun() public {
+        _postReferenceCollateral();
+        _borrow(15_000e6);
+        _pauseBorrow();
+        oracle.setPrice(address(weth), 1_700e18, 0);
+
+        vm.startPrank(bob);
+        market.absorb(alice, new bytes[](0));
+        market.buyCollateral(address(weth), 0, 1_000e6, bob, new bytes[](0));
+        vm.stopPrank();
+
+        assertEq(market.borrowBalanceOf(alice), 0, "absorbed while borrowing is paused");
+        assertGt(weth.balanceOf(bob), 0, "inventory sold while borrowing is paused");
+    }
+
+    /// @dev With both flags set a debtor can still repay and top up, while a new borrow and a supply by
+    ///      a non-debtor stay blocked.
+    function test_pausedBorrowAndSupply_debtorCanStillRepayAndTopUp() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+        _pauseBorrow();
+        assertEq(market.getMarketState().pauseFlags, PAUSE_SUPPLY | PAUSE_BORROW, "both flags set");
+
+        vm.startPrank(alice);
+        market.supply(address(base), 2_000e6);
+        market.supply(address(weth), 1e18);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_BORROW));
+        market.withdraw(address(base), 1_000e6, new bytes[](0));
+        vm.stopPrank();
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_SUPPLY));
+        market.supply(address(base), 1_000e6);
+
+        assertEq(market.borrowBalanceOf(alice), 3_000e6, "repaid under both pauses");
+        assertEq(market.userCollateral(alice, address(weth)), 11e18, "topped up under both pauses");
     }
 
     /*//////////////////////////////////////////////////////////////

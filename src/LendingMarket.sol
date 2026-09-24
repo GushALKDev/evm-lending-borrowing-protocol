@@ -50,6 +50,7 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     uint8 internal constant PAUSE_WITHDRAW = 1 << 2;
     uint8 internal constant PAUSE_ABSORB = 1 << 3;
     uint8 internal constant PAUSE_BUY = 1 << 4;
+    uint8 internal constant PAUSE_BORROW = 1 << 5;
 
     /*//////////////////////////////////////////////////////////////
                               IMMUTABLES
@@ -577,6 +578,10 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         // Borrow branch: the checks run against the post-write state, so the health check sees
         // exactly the position the account is left holding.
         if (newPrincipal < 0) {
+            // Opening or growing debt is the risk PAUSE_BORROW stops. A withdrawal that stays within
+            // the positive balance never reaches this branch, so supplier exits are unaffected.
+            _requireNotPaused(PAUSE_BORROW);
+
             // Dust guard: a debt too small to be worth absorbing must never be created. The bound is
             // on the resulting debt, not on the borrowed amount, so it also catches a supply-to-debt
             // crossing that would land in the dust band. Repays are not guarded: they only improve health.
@@ -607,6 +612,8 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     {
         _requireListed(asset);
         if (amount == 0) revert ZeroAmount();
+        // Collateral backing a debt stays put while borrowing is paused; debt-free accounts are free.
+        if (userBasic[account].principal < 0) _requireNotPaused(PAUSE_BORROW);
 
         uint128 amount128 = amount.toUint128();
         uint128 balance = userCollateralBalance[account][asset];

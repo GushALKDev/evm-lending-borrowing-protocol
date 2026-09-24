@@ -29,6 +29,7 @@ contract ProtocolManagementTest is Test {
     address internal alice = makeAddr("alice");
 
     uint8 internal constant PAUSE_SUPPLY = 1 << 0;
+    uint8 internal constant PAUSE_BORROW = 1 << 5;
 
     function setUp() public {
         base = new MockERC20("USD Coin", "USDC", 6);
@@ -143,6 +144,33 @@ contract ProtocolManagementTest is Test {
         vm.prank(owner);
         market.setPauseFlags(0);
         assertEq(market.getMarketState().pauseFlags, 0, "owner cleared the flag");
+    }
+
+    /// @dev PAUSE_BORROW follows the same rule as every other bit: the guardian adds it on top of the
+    ///      current set but cannot drop it.
+    function test_roles_guardianCanAddBorrowPauseButNotClearIt() public {
+        vm.prank(guardian);
+        market.setPauseFlags(PAUSE_SUPPLY);
+        vm.prank(guardian);
+        market.setPauseFlags(PAUSE_SUPPLY | PAUSE_BORROW);
+        assertEq(market.getMarketState().pauseFlags, PAUSE_SUPPLY | PAUSE_BORROW, "guardian added the borrow flag");
+
+        vm.prank(guardian);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ILendingMarket.GuardianCannotUnpause.selector, PAUSE_SUPPLY | PAUSE_BORROW, PAUSE_SUPPLY
+            )
+        );
+        market.setPauseFlags(PAUSE_SUPPLY);
+    }
+
+    function test_roles_ownerCanClearBorrowPause() public {
+        vm.prank(guardian);
+        market.setPauseFlags(PAUSE_BORROW);
+
+        vm.prank(owner);
+        market.setPauseFlags(0);
+        assertEq(market.getMarketState().pauseFlags, 0, "owner cleared the borrow flag");
     }
 
     function test_roles_strangerCannotSetFlags() public {

@@ -111,7 +111,10 @@ uint8 constant PAUSE_TRANSFER = 1 << 1;
 uint8 constant PAUSE_WITHDRAW = 1 << 2;
 uint8 constant PAUSE_ABSORB   = 1 << 3;
 uint8 constant PAUSE_BUY      = 1 << 4;
+uint8 constant PAUSE_BORROW   = 1 << 5;
 ```
+
+Six of the eight bits of the packed `uint8 pauseFlags` are used, so the flag fits without changing the `MarketState` layout.
 
 ---
 
@@ -162,7 +165,7 @@ Plus the standard ERC-20 surface (`transfer`, `transferFrom`, `approve`, `allowa
 
 | Contract        | Statement                                                                                          |
 | :--------------- | :--------------------------------------------------------------------------------------------------- |
-| Preconditions   | `amount > 0`; `PAUSE_WITHDRAW` clear; base: resulting debt (if any) satisfies `|borrowPV| >= minBorrow` and `isBorrowCollateralized(msg.sender)` at `price - conf`; collateral: same health check iff account has debt; market cash sufficient |
+| Preconditions   | `amount > 0`; `PAUSE_WITHDRAW` clear; `PAUSE_BORROW` clear if the call would open or increase debt (base) or if the account is in debt (collateral), else `Paused(PAUSE_BORROW)`; base: resulting debt (if any) satisfies `|borrowPV| >= minBorrow` and `isBorrowCollateralized(msg.sender)` at `price - conf`; collateral: same health check iff account has debt; market cash sufficient |
 | Effects         | Accrues; principal decreases (borrow branch past zero) or collateral ledgers decrease; `assetsIn` bit cleared on zero balance |
 | Postconditions  | `isBorrowCollateralized(msg.sender)` holds; tokens sent last; surplus `msg.value` refunded         |
 | Oracle          | Transactional (`updateAndGetPrice`) only when the action can reduce health                          |
@@ -336,7 +339,7 @@ Roles: **PUBLIC** (anyone), **OWNER** (`Ownable2Step` multisig, transferable in 
 | Function             | PUBLIC | OWNER | GUARDIAN | Pause gate        |
 | :-------------------- | :----- | :---- | :------- | :----------------- |
 | `supply` / `supplyTo` | ✅    | -     | -        | `PAUSE_SUPPLY`, except a repay of an indebted `dst` (up to its debt) and a collateral top-up of an indebted `dst` |
-| `withdraw`           | ✅     | -     | -        | `PAUSE_WITHDRAW`  |
+| `withdraw`           | ✅     | -     | -        | `PAUSE_WITHDRAW` (all); `PAUSE_BORROW` (a base withdrawal that opens or increases debt, and a collateral withdrawal while in debt) |
 | `transfer` / `transferFrom` | ✅ | -   | -        | `PAUSE_TRANSFER`  |
 | `absorb`             | ✅     | -     | -        | `PAUSE_ABSORB` (last resort, see [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy)) |
 | `buyCollateral`      | ✅     | -     | -        | `PAUSE_BUY`       |

@@ -14,7 +14,9 @@ import {MockPriceOracle} from "../mocks/MockPriceOracle.sol";
  *         fixed cast of actors (3 suppliers, 3 borrowers, 1 liquidator, owner, guardian) exercises
  *         every mutating function, plus `warp` (time jumps) and `movePrice` (oracle steps within and
  *         beyond the confidence band). Pause flags are set by both the owner and the guardian, and
- *         repays are attempted while PAUSE_SUPPLY is set. Ghost variables track base inflows/outflows
+ *         repays are attempted while PAUSE_SUPPLY is set. Every action is wrapped in a guard that
+ *         latches any debt increase, or any collateral drop of an indebted account outside absorb,
+ *         while PAUSE_BORROW is set. Ghost variables track base inflows/outflows
  *         for cash conservation (INV-5), and latches record per-action violations (the INV-4 reserve
  *         table, INV-9, INV-10, absorb eligibility, a repay refused under the pause, unexpected
  *         reverts) for the invariant contract to assert.
@@ -65,12 +67,17 @@ contract Handler is Test {
     bool public repayBlockedWhilePaused;
     bytes public repayBlockedReason;
 
+    // --- No new risk under PAUSE_BORROW ---
+    bool public riskAddedWhileBorrowPaused;
+    string public riskAddedViolation;
+
     // The market's declared errors: the only acceptable reasons for a handler call to revert. Anything
     // else (a panic, an empty revert, a token error) means an input reached a path it should not.
     mapping(bytes4 => bool) internal expectedError;
 
     uint8 internal constant PAUSE_SUPPLY = 1 << 0;
     uint8 internal constant PAUSE_ABSORB = 1 << 3;
+    uint8 internal constant PAUSE_BORROW = 1 << 5;
 
     constructor(
         LendingMarketHarness _market,
@@ -163,6 +170,37 @@ contract Handler is Test {
         reserveTableViolation = op;
     }
 
+    /// @dev Snapshots every actor around an action and, if PAUSE_BORROW was set when it started,
+    ///      latches a debt principal that grew (interest moves the index, never the principal) or an
+    ///      indebted account's collateral that fell. Absorb is the one action allowed to take collateral.
+    modifier borrowGuard(bool isAbsorb) {
+        bool paused = market.getMarketState().pauseFlags & PAUSE_BORROW != 0;
+        uint256 n = allActors.length;
+        int104[] memory principals = new int104[](n);
+        uint128[] memory collaterals = new uint128[](n);
+        for (uint256 i = 0; i < n; i++) {
+            principals[i] = market.getPrincipal(allActors[i]);
+            collaterals[i] = market.userCollateral(allActors[i], address(weth));
+        }
+        _;
+        if (paused) _checkBorrowGuard(principals, collaterals, isAbsorb);
+    }
+
+    function _checkBorrowGuard(int104[] memory principals, uint128[] memory collaterals, bool isAbsorb) internal {
+        for (uint256 i = 0; i < allActors.length; i++) {
+            int104 principal = market.getPrincipal(allActors[i]);
+            // A more negative principal is a larger debt principal.
+            if (principal < 0 && principal < principals[i]) {
+                riskAddedWhileBorrowPaused = true;
+                riskAddedViolation = "debt principal increased";
+            }
+            if (!isAbsorb && principals[i] < 0 && market.userCollateral(allActors[i], address(weth)) < collaterals[i]) {
+                riskAddedWhileBorrowPaused = true;
+                riskAddedViolation = "indebted account's collateral decreased";
+            }
+        }
+    }
+
     /// @dev INV-10 on the acting account: its debt is either closed or at least minBorrow.
     function _checkDust(address account) internal {
         uint256 debt = market.borrowBalanceOf(account);
@@ -173,7 +211,7 @@ contract Handler is Test {
                           BASE SUPPLY / WITHDRAW
     //////////////////////////////////////////////////////////////*/
 
-    function supplyBase(uint256 actorSeed, uint256 amount) external {
+    function supplyBase(uint256 actorSeed, uint256 amount) external borrowGuard(false) {
         address actor = _actor(actorSeed);
         amount = bound(amount, 1e6, 50_000e6); // small enough that borrows can drive utilization past 100%
         base.mint(actor, amount);
@@ -192,7 +230,7 @@ contract Handler is Test {
         vm.stopPrank();
     }
 
-    function withdrawBase(uint256 actorSeed, uint256 amount) external {
+    function withdrawBase(uint256 actorSeed, uint256 amount) external borrowGuard(false) {
         address actor = _actor(actorSeed);
         amount = bound(amount, 1e6, 500_000e6);
 
@@ -219,7 +257,7 @@ contract Handler is Test {
                        COLLATERAL SUPPLY / WITHDRAW
     //////////////////////////////////////////////////////////////*/
 
-    function supplyCollateral(uint256 borrowerSeed, uint256 amount) external {
+    function supplyCollateral(uint256 borrowerSeed, uint256 amount) external borrowGuard(false) {
         address actor = _borrower(borrowerSeed);
         amount = bound(amount, 1e15, 100e18);
         weth.mint(actor, amount);
@@ -237,7 +275,7 @@ contract Handler is Test {
         vm.stopPrank();
     }
 
-    function withdrawCollateral(uint256 borrowerSeed, uint256 amount) external {
+    function withdrawCollateral(uint256 borrowerSeed, uint256 amount) external borrowGuard(false) {
         address actor = _borrower(borrowerSeed);
         amount = bound(amount, 1e15, 100e18);
         int256 reservesBefore = market.getReserves();
@@ -255,7 +293,7 @@ contract Handler is Test {
                               TRANSFER
     //////////////////////////////////////////////////////////////*/
 
-    function transferBase(uint256 fromSeed, uint256 toSeed, uint256 amount) external {
+    function transferBase(uint256 fromSeed, uint256 toSeed, uint256 amount) external borrowGuard(false) {
         address from = _actor(fromSeed);
         address to = _actor(toSeed);
         amount = bound(amount, 0, market.balanceOf(from));
@@ -273,7 +311,7 @@ contract Handler is Test {
                           LIQUIDATION PATHS
     //////////////////////////////////////////////////////////////*/
 
-    function absorb(uint256 borrowerSeed) external {
+    function absorb(uint256 borrowerSeed) external borrowGuard(true) {
         address account = _borrower(borrowerSeed);
         // MockPriceOracle's push does not move prices, so the view sees exactly what absorb checks.
         bool eligible = market.isLiquidatable(account);
@@ -290,7 +328,7 @@ contract Handler is Test {
         }
     }
 
-    function buyCollateral(uint256 baseAmount) external {
+    function buyCollateral(uint256 baseAmount) external borrowGuard(false) {
         baseAmount = bound(baseAmount, 1e6, 100_000e6);
         base.mint(liquidator, baseAmount);
 
@@ -312,7 +350,7 @@ contract Handler is Test {
                           GOVERNANCE / TIME / PRICE
     //////////////////////////////////////////////////////////////*/
 
-    function withdrawReserves(uint256 amount) external {
+    function withdrawReserves(uint256 amount) external borrowGuard(false) {
         int256 reserves = market.getReserves();
         if (reserves <= 0) return;
         amount = bound(amount, 1, uint256(reserves));
@@ -327,7 +365,7 @@ contract Handler is Test {
         }
     }
 
-    function warp(uint256 secondsForward) external {
+    function warp(uint256 secondsForward) external borrowGuard(false) {
         secondsForward = bound(secondsForward, 1, 30 days);
         vm.warp(block.timestamp + secondsForward);
         // Snapshot around a pure accrue: the invariant asserts this never lowers reserves.
@@ -338,14 +376,16 @@ contract Handler is Test {
 
     /// @dev Steps the WETH price up or down, occasionally with a wide confidence band, so absorb
     ///      eligibility and buyCollateral pricing are exercised across regimes.
-    function movePrice(uint256 priceRaw, uint256 confRaw) external {
+    function movePrice(uint256 priceRaw, uint256 confRaw) external borrowGuard(false) {
         uint256 price = bound(priceRaw, 100e18, 5_000e18);
         uint256 conf = bound(confRaw, 0, price / 20); // up to 5% band
         oracle.setPrice(address(weth), price, conf);
     }
 
-    function togglePause(uint256 flagsRaw) external {
-        uint8 flags = uint8(bound(flagsRaw, 0, 31));
+    function togglePause(uint256 flagsRaw) external borrowGuard(false) {
+        // AND of two random bytes: each of the six bits is set about a quarter of the time. At one in
+        // two, WITHDRAW and BORROW together left borrowing open too rarely for absorbs to occur.
+        uint8 flags = uint8(flagsRaw & (flagsRaw >> 8) & 63);
         // The owner can both set and clear, so this is the action that lifts pauses.
         vm.prank(owner);
         try market.setPauseFlags(flags) {}
@@ -356,8 +396,8 @@ contract Handler is Test {
 
     /// @dev The guardian can only add flags, so one random flag is OR-ed onto the current set. One flag
     ///      at a time keeps the market from spending most of a run fully paused before the owner clears.
-    function guardianPause(uint256 flagRaw) external {
-        uint8 flags = uint8(1 << bound(flagRaw, 0, 4)) | market.getMarketState().pauseFlags;
+    function guardianPause(uint256 flagRaw) external borrowGuard(false) {
+        uint8 flags = uint8(1 << bound(flagRaw, 0, 5)) | market.getMarketState().pauseFlags;
         vm.prank(guardian);
         try market.setPauseFlags(flags) {}
         catch (bytes memory reason) {
@@ -375,7 +415,10 @@ contract Handler is Test {
     ///      flags afterwards so the rest of the run is not left paused. It repays a partial or exact
     ///      amount, or the full-debt sentinel one call in four, from the debtor or a third-party payer,
     ///      and latches any revert: under these preconditions no revert is acceptable.
-    function repayWhileSupplyPaused(uint256 borrowerSeed, uint256 payerSeed, uint256 amount) external {
+    function repayWhileSupplyPaused(uint256 borrowerSeed, uint256 payerSeed, uint256 amount)
+        external
+        borrowGuard(false)
+    {
         address debtor = _borrower(borrowerSeed);
         address payer = _actor(payerSeed);
         market.accrue();
