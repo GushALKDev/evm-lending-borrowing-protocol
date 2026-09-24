@@ -6,7 +6,7 @@
 
 ---
 
-> The thesis of the project, run as executable stateful fuzzing. A single `Handler` drives the market through 100,000 bounded random calls per run, and after every step the system invariants of Guide 6 must hold. A reverting handler call (an undercollateralized borrow, a withdrawal past cash) is a valid no-op, provided it reverts with one of the market's declared errors; everything else is latched and fails the suite. On its first full run this suite found a critical minting bug; see below.
+> The thesis of the project, run as executable stateful fuzzing. A single `Handler` drives the market through 100,000 bounded random calls per invariant (1,000 runs of 100 calls), and after every step the system invariants of Guide 6 must hold. A reverting handler call (an undercollateralized borrow, a withdrawal past cash) is a valid no-op, provided it reverts with one of the market's declared errors; everything else is latched and fails the suite. On its first full run this suite found a critical minting bug; see below.
 
 ## Handler design
 
@@ -44,7 +44,7 @@ The suite originally seeded 10,000,000 USDC and let `supplyBase` add up to 1,000
 
 ### The reserve table has no tolerance
 
-Only `warp` moves time, and it accrues, so every other action runs with `elapsed == 0`: its internal accrue is a no-op and its reserve delta is the directed conversion alone. The table bounds that exactly, so unlike the pure accrue it is asserted with no tolerance, and it held over 1.5M calls. It is also the stateful check that pins rounding direction where the round trip cannot: with `presentValueBorrow` flipped to floor, the debt round trip `presentValue(principalValue(pv))` still lands at or above `pv` (a ceiled principal cannot floor back below an integer `pv`), so the live-index INV-3 passes by construction, while the table fails. The same blind spot of round trips is described in [Mutation Checks](./06-mutation-checks.md#the-finding-that-shaped-the-suite); the per-site exact-value fuzz tests remain the primary pin on each rounding direction.
+Only `warp` moves time, and it accrues, so every other action runs with `elapsed == 0`: its internal accrue is a no-op and its reserve delta is the directed conversion alone. The table bounds that exactly, so unlike the pure accrue it is asserted with no tolerance, and it holds over the 1,700,000 calls of a full default run. It is also the stateful check that pins rounding direction where the round trip cannot: with `presentValueBorrow` flipped to floor, the debt round trip `presentValue(principalValue(pv))` still lands at or above `pv` (a ceiled principal cannot floor back below an integer `pv`), so the live-index INV-3 passes by construction, while the table fails. The same blind spot of round trips is described in [Mutation Checks](./06-mutation-checks.md#the-finding-that-shaped-the-suite); the per-site exact-value fuzz tests remain the primary pin on each rounding direction.
 
 ### INV-10 binds the borrow branch only
 
@@ -64,7 +64,7 @@ Adding the sixth bit to the toggles first starved the other paths: with each bit
 
 ### Revert-reason allowlist
 
-`fail_on_revert = false` is what lets a rejected action be a harmless no-op, but it also lets an arithmetic panic or a token error pass silently. Every handler `catch` therefore inspects the revert data and latches anything whose selector is not one of the market's declared errors. None fired over 1.5M calls.
+`fail_on_revert = false` is what lets a rejected action be a harmless no-op, but it also lets an arithmetic panic or a token error pass silently. Every handler `catch` therefore inspects the revert data and latches anything whose selector is not one of the market's declared errors. None fires over the 1,700,000 calls of a full default run.
 
 ### Falsification
 

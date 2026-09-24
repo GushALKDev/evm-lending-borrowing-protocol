@@ -248,7 +248,7 @@ This project showcases advanced smart contract development skills through **orig
 **Implementation (Phase 8, the last PoC phase, see [ROADMAP](./docs/ROADMAP.md)):**
 
 - [x] Core contracts (LendingMarket, InterestRateModel, PythChainlinkOracle)
-- [x] Full test pyramid: unit, fuzz, invariant, integration, and fork (oracle and token integration), 307 tests with coverage above 95% on every contract
+- [x] Full test pyramid: unit, fuzz, invariant, integration, and fork (oracle and token integration), 331 tests with coverage above 95% on every contract
 - [x] Deployment script, static analysis (Slither, Aderyn), and mutation checks on every rounding site
 - [ ] Audit checklist, internal line-by-line review, and findings remediation
 

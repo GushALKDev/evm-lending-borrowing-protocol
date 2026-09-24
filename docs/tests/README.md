@@ -33,19 +33,19 @@
 
 ## 📊 Current Status
 
-**307 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
+**331 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
 | [`LendingMarketAccountingTest`](../../test/unit/LendingMarketAccounting.t.sol) | Unit  |    36 | 1     |
 | [`SupplyWithdrawTest`](../../test/unit/SupplyWithdraw.t.sol)          | Unit  |    48 | 3     |
-| [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol)                | Unit  |    48 | 4     |
+| [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol)                | Unit  |    59 | 4     |
 | [`InterestRateModelTest`](../../test/unit/InterestRateModel.t.sol)    | Unit  |    18 | 2     |
 | [`MarketAccrualWithRealCurveTest`](../../test/unit/MarketAccrualWithRealCurve.t.sol) | Unit |  4 | 2     |
 | [`AccrualOverflowTest`](../../test/unit/AccrualOverflow.t.sol)        | Unit  |     3 | 1     |
 | [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol)| Unit  |    28 | 5     |
 | [`AbsorbLiquidationTest`](../../test/unit/AbsorbLiquidation.t.sol)    | Unit  |    22 | 6     |
-| [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol)  | Unit  |    16 | 7     |
+| [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol)  | Unit  |    18 | 7     |
 | [`ConversionRoundingTest`](../../test/fuzz/ConversionRounding.t.sol)  | Fuzz  |    19 | 1     |
 | [`InterestRateModelFuzzTest`](../../test/fuzz/InterestRateModel.t.sol)| Fuzz  |     6 | 2     |
 | [`BorrowCapacityFuzzTest`](../../test/fuzz/BorrowCapacity.t.sol)      | Fuzz  |     6 | 4     |
@@ -56,21 +56,60 @@
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
 | [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) | Integration | 4 | 8 |
 | [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) | Integration | 15 | 8 |
+| [`ForcedEthRefundTest`](../../test/integration/ForcedEthRefund.t.sol) | Integration | 9 | 8 |
 | [`FullLifecycleTest`](../../test/integration/FullLifecycle.t.sol)     | Integration | 1 | 8 |
 | [`DeployScriptTest`](../../test/integration/DeployScript.t.sol)       | Integration | 1 | 8 |
-| [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 16 | 8 |
-| [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 2 | 8 |
-| **Total**                                                            |       | **307** |     |
+| [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 17 | 8 |
+| [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 3 | 8 |
+| **Total**                                                            |       | **331** |     |
+
+| Layer (directory) | Tests |
+| :---------------- | ----: |
+| Unit (`test/unit`) | 236 |
+| Fuzz (`test/fuzz`) | 43 |
+| Integration (`test/integration`) | 32 |
+| Invariant (`test/invariant`) | 17 |
+| Fork (`test/fork`) | 3 |
+| **Total** | **331** |
+
+Under the default profile, 41 tests take fuzzed parameters at 1,000 runs each (41,000 runs), and each of the 17 invariants runs 1,000 sequences of 100 calls (100,000 calls each, 1,700,000 in total). The fork suite runs against the pinned mainnet block when `FORK_RPC_URL` is set and passes as a no-op otherwise; the counts above are the same in both modes.
 
 ### Coverage
 
 | File                        | Lines            | Statements       | Branches       | Functions       |
 | :-------------------------- | :--------------- | :--------------- | :------------- | :-------------- |
 | `src/InterestRateModel.sol` | 100.00% (17/17)  | 100.00% (25/25)  | 100.00% (4/4)  | 100.00% (3/3)   |
-| `src/LendingMarket.sol`     | 99.72% (354/355) | 99.58% (472/474) | 97.30% (72/74) | 100.00% (61/61) |
+| `src/LendingMarket.sol`     | 99.72% (361/362) | 99.59% (484/486) | 97.33% (73/75) | 100.00% (62/62) |
 | `src/PythChainlinkOracle.sol` | 98.46% (64/65) | 96.91% (94/97)   | 95.45% (21/22) | 100.00% (8/8)   |
 
-Every contract is now above the 95% gate on lines, statements, branches, and functions (roadmap 8.9). Phase 8 raised branch coverage on `LendingMarket.sol` from 81.5% to 97.1% by pinning the previously untested revert sides of the input guards (constructor `numAssets`/`collateralAsset`/`liquidateCF`, `ZeroAmount` on every entry point, `InvalidRecipient` on transfer and buyCollateral, and the `RefundFailed` sweep via a rejecting-receiver caller). The few remaining uncovered branches are defensive or physically hard to reach: the fallthrough `revert UnknownAsset` in `_offsetOf` (every caller passes `_requireListed` first, so it is unreachable), the `InsufficientCash` bound in `withdrawReserves` (reachable only when bad debt pushes reserves above cash), and the positive-`targetExpo` scale-up branch of `_scalePyth` (unreachable with realistic Pyth feeds). Details in [Gaps & Roadmap](./07-gaps-and-roadmap.md).
+Every contract is now above the 95% gate on lines, statements, branches, and functions (roadmap 8.9). Phase 8 raised branch coverage on `LendingMarket.sol` from 81.5% to 97.1% by pinning the previously untested revert sides of the input guards (constructor `numAssets`/`collateralAsset`/`liquidateCF`, `ZeroAmount` on every entry point, `InvalidRecipient` on transfer and buyCollateral, and the `RefundFailed` path via a rejecting-receiver caller). The lines and branches still reported as never hit are listed, each with its reason, in [Gaps & Roadmap](./07-gaps-and-roadmap.md#deliberately-unreachable-kept-as-defensive-guards).
+
+### Reproducing the numbers
+
+Every count on this page and in the README comes from one of these commands, run at the repository root:
+
+```bash
+# Tests per suite and the total; with FORK_RPC_URL unset (mock mode) the fork suite passes as a no-op
+forge test --summary
+FORK_RPC_URL= forge test --summary
+
+# Tests per layer (directory)
+forge test --list --json | jq -r 'to_entries[] | "\(.key | split("/")[1]) \([.value[] | length] | add)"' \
+  | awk '{n[$1] += $2} END {for (k in n) print k, n[k]}'
+
+# Fuzzed tests and their runs, invariants and their calls
+forge test | awk '/runs: [0-9]+, μ/ {match($0, /runs: [0-9]+/); f++; r += substr($0, RSTART + 6, RLENGTH - 6)}
+  /calls: [0-9]+,/ {match($0, /calls: [0-9]+/); i++; c += substr($0, RSTART + 7, RLENGTH - 7)}
+  END {print f " fuzz tests, " r " runs; " i " invariants, " c " calls"}'
+
+# Coverage per contract (lines, statements, branches, functions)
+forge coverage --no-match-coverage "test|script" --report summary
+
+# Lines and branches never hit
+forge coverage --no-match-coverage "test|script" --report lcov
+awk -F'[:,]' '/^SF:/ {f = $2} /^BRDA:/ && f ~ /^src/ && ($5 == "-" || $5 == "0") {print f ":" $2 " branch"}
+  /^DA:/ && f ~ /^src/ && $3 == "0" {print f ":" $2 " line"}' lcov.info
+```
 
 ---
 

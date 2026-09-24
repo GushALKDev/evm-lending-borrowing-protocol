@@ -1,6 +1,6 @@
 # Protocol Management (Phase 7)
 
-**Suites:** [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol) (16 unit)
+**Suites:** [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol) (18 unit)
 **Covers:** roadmap items 7.2 to 7.6 · [Guide 5, Access Control Matrix](../05-implementation.md#6-access-control-matrix) · [Guide 6, INV-13](../06-security.md#2-system-invariants)
 
 ---

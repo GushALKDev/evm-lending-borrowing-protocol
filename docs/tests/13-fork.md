@@ -1,6 +1,6 @@
 # Fork Tests (Phase 8)
 
-**Suite:** [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol) (2 tests) · [fixtures](../../test/fork/fixtures/)
+**Suite:** [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol) (3 tests) · [fixtures](../../test/fork/fixtures/)
 **Covers:** roadmap item 8.7 · [Guide 6, Section 7](../06-security.md#7-testing-plan)
 **Config:** Ethereum mainnet fork pinned at block 25595265; runs only when `FORK_RPC_URL` is set
 
