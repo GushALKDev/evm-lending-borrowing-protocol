@@ -276,14 +276,20 @@ The oracle is the most security-critical dependency: an inflated collateral pric
 
 ### Validation Pipeline
 
-Every price passes 4 checks; failure at any stage reverts:
+Every price runs the same pipeline, in this order, on both read paths; failure at any stage reverts:
 
-| Check                | Condition                                                          | Error                   | Rationale                                          |
-| :-------------------- | :------------------------------------------------------------------ | :----------------------- | :--------------------------------------------------- |
-| **Staleness**        | `publishTime >= block.timestamp - MAX_STALENESS`                   | `StalePrice`            | Old prices misstate borrowing capacity and health    |
-| **Confidence**       | `conf * 10_000 / price <= MAX_CONFIDENCE_BPS`                      | `ConfidenceTooWide`     | Wide confidence means market stress or illiquidity   |
-| **Non-zero**         | `price > 0`                                                        | `ZeroPrice`             | Sanity check                                         |
-| **Deviation anchor** | `\|pythPrice - chainlinkPrice\| / chainlinkPrice <= MAX_DEVIATION` | `PriceDeviationTooHigh` | Catches Pyth anomalies against an independent source |
+| # | Check                    | Condition                                                          | Error                   | Rationale                                          |
+| :- | :------------------------ | :------------------------------------------------------------------ | :----------------------- | :--------------------------------------------------- |
+| 1 | **Known asset**          | the asset has a feed configured                                    | `UnknownAsset`          | No silent default feed                               |
+| 2 | **Pyth non-zero**        | `price > 0`                                                        | `ZeroPrice`             | Sanity check                                         |
+| 3 | **Pyth staleness**       | `publishTime + MAX_STALENESS >= block.timestamp`                   | `StalePrice`            | Old prices misstate borrowing capacity and health    |
+| 4 | **Confidence**           | `conf * 10_000 / price <= MAX_CONFIDENCE_BPS`                      | `ConfidenceTooWide`     | Wide confidence means market stress or illiquidity   |
+| 5 | **Chainlink non-zero**   | `answer > 0`                                                       | `ZeroPrice`             | An invalid anchor cannot validate anything           |
+| 6 | **Chainlink staleness**  | `updatedAt + heartbeat >= block.timestamp` (per-feed heartbeat)    | `StaleAnchor`           | A stalled anchor fails closed rather than vouching for Pyth |
+| 7 | **Chainlink decimals**   | `decimals() <= 18`                                                 | `InvalidConfiguration("decimals")` | Normalization to 1e18 must not underflow     |
+| 8 | **Deviation anchor**     | `\|pythPrice - chainlinkPrice\| * 10_000 / chainlinkPrice <= MAX_DEVIATION_BPS` | `PriceDeviationTooHigh` | Catches Pyth anomalies against an independent source |
+
+On the transactional path, `updateAndGetPrice` first requires `msg.value` to cover the Pyth fee (`InsufficientFee`). Reverts raised by the external contracts themselves bubble up unchanged: an update the Pyth contract rejects, a Pyth feed that was never published, or a reverting `latestRoundData`. Checks 2 to 4 read the stored Pyth price, so a fresher signed update can clear them, but only as far as Pyth is publishing a sound price: staleness clears with any fresh update, a wide band only once the published band narrows. Checks 5 to 7 read Chainlink, which no caller can update, and check 8 needs both sources to agree; these persist until the sources themselves change.
 
 ### Suggested Parameters
 
@@ -312,7 +318,7 @@ Unlike a perp DEX, a money market has state-changing paths that must work withou
 
 ### Oracle Failure Policy (accepted risk)
 
-If Pyth is stale, confidence is wide, or Chainlink deviates, price-consuming functions revert. In particular `absorb` reverts: the protocol never liquidates at an unverifiable price. Bad debt that accrues during an outage lands in reserves (which can go negative) and is analyzed as an adversarial scenario in [Guide 6](./06-security.md). `supply` and debt-free withdrawals keep working during an outage because they never reduce health.
+If any check in the pipeline fails (Pyth stale or non-positive, confidence too wide, Chainlink stale or non-positive, or the two sources deviating), price-consuming functions revert. In particular `absorb` reverts: the protocol never liquidates at an unverifiable price. A failure on one collateral's feed blocks every price-consuming action of the accounts that hold it, across their whole position ([Guide 6, Scenario S2](./06-security.md#s2-oracle-outage-during-a-drawdown)). Bad debt that accrues during an outage lands in reserves (which can go negative) and is analyzed as an adversarial scenario in [Guide 6](./06-security.md). `supply` and debt-free withdrawals keep working during an outage because they never reduce health.
 
 ### ADR-6: Pyth Pull + Chainlink Anchor vs Chainlink Push Only
 
@@ -538,7 +544,7 @@ All base balance changes, in every flow (supply, withdraw, borrow, repay, absorb
 
 ### 7.5 Granular Pausability
 
-Five independent pause bits (`SUPPLY`, `TRANSFER`, `WITHDRAW`, `ABSORB`, `BUY`) instead of a global switch, so an incident response can, for example, halt new deposits while leaving withdrawals and liquidations alive. The philosophy of which levers to pull in which scenario is in [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy).
+Five independent pause bits (`SUPPLY`, `TRANSFER`, `WITHDRAW`, `ABSORB`, `BUY`) instead of a global switch, so an incident response can, for example, halt new deposits while leaving withdrawals and liquidations alive. Pausing deposits stops new exposure only: under `PAUSE_SUPPLY`, anyone can still repay an account in debt (up to its debt) and top up that account's collateral, so a supply pause never strands a borrower while absorb stays live. There is no separate borrow or repay flag: borrowing shares `withdraw` and is gated by `PAUSE_WITHDRAW`, and repaying is the `PAUSE_SUPPLY` exception above. The philosophy of which levers to pull in which scenario is in [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy).
 
 ---
 

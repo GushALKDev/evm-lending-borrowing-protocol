@@ -188,7 +188,7 @@ Explicit modeling of the states the protocol is designed to survive. Reference p
 
 **Setup.** Pyth halts for 30 minutes while WETH drifts down 6%. All absorbs revert by policy ([Guide 3, Oracle Failure Policy](./03-architecture.md#oracle-failure-policy-accepted-risk)).
 
-**During.** Borrowers can still repay and supply collateral (no oracle needed): rational ones save themselves. Nobody can borrow or withdraw collateral against stale prices: the attack surface is closed, not open.
+**During.** Borrowers can still repay and add collateral, and suppliers can still withdraw (none of these reads a price): rational borrowers save themselves. Nobody can borrow, or withdraw collateral while in debt, against stale prices: the attack surface is closed, not open. When only one collateral's feed fails, the effect is confined to the accounts holding it but covers their whole position (see the known behavior below).
 
 **After.** Absorbs resume at post-drop prices. Accounts that crossed the threshold mid-outage are absorbed as in S1's gapped path; the extra bad debt is bounded by (drift beyond the `liquidateCF -> LF` margin) x (debt that crossed during the window). With the reference margin of 6.3% ([Guide 2, Section 8](./02-mathematics.md#8-liquidation-math-absorb)), a 6% outage drift produces near-zero bad debt; a 15% flash crash during an outage does not, and lands on reserves.
 
@@ -235,8 +235,8 @@ Accounts that do not hold X are unaffected. A debtor holding X can still repay (
 Principles, in priority order:
 
 1. **Pause stops bleeding; it never seizes.** No pause flag touches balances, prices, or parameters. The maximum effect of any flag combination is "this market stands still".
-2. **Exits and repayments are sacred.** `supply` (repayment path) and `accrue` are the mechanisms by which users and the protocol heal; pausing supply is justified only to stop deposits *into* a market with a confirmed accounting or oracle bug.
-3. **Guardian adds, owner clears.** The guardian is a fast key that can only increase the paused set ([Guide 5](./05-implementation.md#6-access-control-matrix)); unpausing (declaring the incident over) requires the slower multisig. A compromised guardian is an availability problem, never a theft.
+2. **Repayments are sacred; exits are paused only on evidence.** Repay and `accrue` are the mechanisms by which users and the protocol heal, and no flag blocks them: `PAUSE_SUPPLY` stops new exposure only, so a repay of an account in debt (up to its debt, by the account or a third party through `supplyTo`) and a collateral top-up of an account in debt still run, and a supply pause never leaves a borrower absorbable yet unable to defend the position. The exits that *can* be paused are `withdraw` (`PAUSE_WITHDRAW`, which also stops borrowing and collateral withdrawal, since all three share the entry point) and lmUSDC transfers (`PAUSE_TRANSFER`); each strands suppliers while set, so it is justified only by a confirmed accounting or oracle bug.
+3. **Guardian adds, owner clears.** The guardian is a fast key that can only increase the paused set ([Guide 5](./05-implementation.md#6-access-control-matrix)); unpausing (declaring the incident over) requires the slower multisig. `renounceOwnership` always reverts, so an owner able to clear always exists: no pause is permanent unless the owner key itself is lost. A compromised guardian is an availability problem, never a theft, but the guardian address is immutable and cannot be rotated ([Section 3, row 16](#3-attack-vectors-and-mitigations)).
 4. **`PAUSE_ABSORB` is the last resort.** Absorb is the solvency valve: pausing it with honest prices manufactures bad debt (S2 dynamics, by choice instead of outage). The only justified use is a *confirmed corrupted oracle that is passing its own checks*, where absorbs would be executing at wrong prices.
 5. **Views and `accrue` are never pausable.** Observability during an incident is part of the security model.
 
@@ -244,11 +244,11 @@ Scenario playbook:
 
 | Incident                                        | Flags to set                       | Rationale                                            |
 | :----------------------------------------------- | :---------------------------------- | :----------------------------------------------------- |
-| Suspected accounting bug                        | `SUPPLY + TRANSFER + WITHDRAW + BUY` | Freeze exposure both ways; absorb stays live         |
+| Suspected accounting bug                        | `SUPPLY + TRANSFER + WITHDRAW + BUY` | Freeze new exposure and outflows; absorb stays live, and borrowers can still repay or top up collateral to stay clear of it |
 | Oracle passing checks but confirmed wrong       | all five including `ABSORB`        | The one case where absorbing is worse than waiting   |
-| Collateral token exploit (e.g. wBTC bridge)     | `SUPPLY + BUY`                     | Stop new exposure and inventory sales; exits continue |
+| Collateral token exploit (e.g. wBTC bridge)     | `SUPPLY + WITHDRAW + BUY`          | Stop new exposure, borrowing, and inventory sales. `SUPPLY` alone no longer keeps the exploited token out: an account already in debt can still top up with it, so `WITHDRAW` is what stops borrowing against it. Supplier exits pause with it; repayments continue |
 | Governance/owner key incident                   | none (guardian watches)            | Owner powers cannot reach balances; rotate via 2-step |
-| Market migration (end of life)                  | `SUPPLY`, later `+ TRANSFER`       | Wind down inflows, let positions close naturally     |
+| Market migration (end of life)                  | `SUPPLY`, later `+ TRANSFER`       | Wind down inflows; borrowers can still repay and suppliers withdraw, so positions close naturally |
 
 ---
 

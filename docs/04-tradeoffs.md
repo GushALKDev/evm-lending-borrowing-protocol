@@ -57,7 +57,8 @@ A structural note up front: several classic lending-protocol risks are *absent b
 
 - Reverting beats mispricing: the protocol never liquidates or lends against an unverifiable price.
 - Health-improving actions (`supply`, repay, debt-free withdrawals) never touch the oracle and keep working through any outage: borrowers can always save themselves.
-- Absorb needs only one fresh Hermes update to resume; outages are bounded by Pyth/Wormhole recovery time, historically minutes.
+- Recovery depends on which check failed. A stale Pyth price is cured by the caller's own fresh Hermes update, so absorb resumes as soon as Pyth and Wormhole publish again (historically minutes). A stale or non-positive Chainlink answer, a Pyth/Chainlink deviation past the bound, or a confidence band past the ceiling cannot be cleared by the caller alone: absorb stays blocked until Chainlink updates, or until Pyth publishes a price inside the band and the deviation bound, and a dead Chainlink feed blocks its asset permanently (Risk 12).
+- A failure on one collateral's feed blocks whole positions that hold it, including absorbs of those accounts, not just that asset ([Guide 6, Scenario S2](./06-security.md#s2-oracle-outage-during-a-drawdown)).
 
 **The residual risk.** Collateral that crashes *during* an outage is absorbed late at post-crash prices; the difference between the threshold price and the resumption price becomes bad debt (quantified in [Guide 6, Scenario S2](./06-security.md#4-adversarial-scenarios)). This is the price of refusing to liquidate blind, and it is absorbed by reserves (Risk 7).
 
@@ -180,7 +181,7 @@ A structural note up front: several classic lending-protocol risks are *absent b
 
 **The risk.** The flip side of [ADR-3](./03-architecture.md#adr-3-immutable-deployment-vs-upgradeable-proxy): a bug in the market, curve, or oracle cannot be patched, and parameters cannot track reality (a collateral factor safe at deployment may be reckless after the asset's liquidity migrates elsewhere; a dead Chainlink feed bricks the deviation anchor forever).
 
-**The mitigation.** The incident path is pause-and-migrate: the guardian freezes the affected flows (granular flags, [Guide 6, Pause Philosophy](./06-security.md#5-pause-and-circuit-breaker-philosophy)), repayments and exits stay open, and liquidity moves to a corrected redeployment. Immutability is also itself a mitigation: no upgrade key exists to compromise, and what was audited is what runs.
+**The mitigation.** The incident path is pause-and-migrate: the guardian freezes the affected flows (granular flags, [Guide 6, Pause Philosophy](./06-security.md#5-pause-and-circuit-breaker-philosophy)); repayments and collateral top-ups of accounts in debt pass even a supply pause, so borrowers are never stranded, supplier exits stay open unless the incident requires pausing `WITHDRAW` itself, and liquidity moves to a corrected redeployment. Immutability is also itself a mitigation: no upgrade key exists to compromise, and what was audited is what runs.
 
 **The residual risk.** Migration is slow, reputationally costly, and strands anyone inattentive in a paused market. A production version would pay for a Comet-style Configurator behind a timelocked governance to get parameter agility back (Future Work); the PoC accepts the trade explicitly.
 
