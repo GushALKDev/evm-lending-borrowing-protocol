@@ -92,7 +92,7 @@ Each of the 17 invariants runs 1,000 sequences of 100 calls (100,000 calls each,
 | File                        | Lines            | Statements       | Branches       | Functions       |
 | :-------------------------- | :--------------- | :--------------- | :------------- | :-------------- |
 | `src/InterestRateModel.sol` | 100.00% (17/17)  | 100.00% (25/25)  | 100.00% (4/4)  | 100.00% (3/3)   |
-| `src/LendingMarket.sol`     | 99.72% (361/362) | 99.59% (484/486) | 97.33% (73/75) | 100.00% (62/62) |
+| `src/LendingMarket.sol`     | 99.72% (361/362) | 99.79% (485/486) | 98.67% (74/75) | 100.00% (62/62) |
 | `src/PythChainlinkOracle.sol` | 98.46% (64/65) | 96.91% (94/97)   | 95.45% (21/22) | 100.00% (8/8)   |
 
 Every contract is now above the 95% gate on lines, statements, branches, and functions (roadmap 8.9). Phase 8 raised branch coverage on `LendingMarket.sol` from 81.5% to 97.1% by pinning the previously untested revert sides of the input guards (constructor `numAssets`/`collateralAsset`/`liquidateCF`, `ZeroAmount` on every entry point, `InvalidRecipient` on transfer and buyCollateral, and the `RefundFailed` path via a rejecting-receiver caller). The lines and branches still reported as never hit are listed, each with its reason, in [Gaps & Roadmap](./07-gaps-and-roadmap.md#deliberately-unreachable-kept-as-defensive-guards).

@@ -18,10 +18,11 @@ The PoC is at 97% (70 of 72 items across phases 0-8; Phase 9 is post-PoC and exc
 These are the lines and branches `forge coverage --report lcov` reports as never hit in `src/`. They are the reason coverage sits just under 100% on the market and oracle, and each is kept rather than removed to buy coverage points:
 
 - `LendingMarket._offsetOf`, the fallthrough `revert UnknownAsset` (line): every caller passes `_requireListed` first, so it is unreachable.
-- `LendingMarket.withdrawReserves`, the `InsufficientCash` bound (branch): reachable only when recognized bad debt has pushed reserves above cash.
 - `LendingMarket.setPauseFlags`, the owner branch (branch): its body is an empty block, which the coverage tool reports as not taken although owner calls run in `test_pause_ownerCanSetAndClear` and `test_roles_ownerCanUnpause`.
 - `PythChainlinkOracle.updateAndGetPrice`, `RefundFailed` (branch): reachable by a direct caller of the oracle that overpays and cannot receive ETH; the market always can, and no test calls the oracle that way.
 - `PythChainlinkOracle._scalePyth`, the scale-down path for `18 + expo < 0` (line): it needs a Pyth exponent below -18, which no realistic feed uses.
+
+The `InsufficientCash` bound in `withdrawReserves`, listed here before, is now reached by the invariant suite. Since cash equals supply minus borrows plus reserves, reserves exceed cash exactly when borrows exceed supply (utilization above 100%), the state the handler's full-cash supplier exits now produce in every seed; the handler's `withdrawReserves` then asks for more than the cash on hand.
 
 ---
 
