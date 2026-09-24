@@ -170,6 +170,7 @@ interface ILendingMarket {
 
     error Unauthorized(address caller);
     error GuardianCannotUnpause(uint8 current, uint8 requested);
+    error RenounceOwnershipDisabled();
     error InvalidConfiguration(bytes32 what);
 
     /*//////////////////////////////////////////////////////////////

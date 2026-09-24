@@ -31,9 +31,10 @@ Positive reserves are seeded by donating base to the market: with no principal c
 | [`test_roles_guardianCanPauseButNotUnpause`](../../test/unit/ProtocolManagement.t.sol#L128) | The guardian sets a pause flag but cannot clear it: `GuardianCannotUnpause` |
 | [`test_roles_ownerCanUnpause`](../../test/unit/ProtocolManagement.t.sol#L139) | The owner clears a flag the guardian set |
 | [`test_roles_strangerCannotSetFlags`](../../test/unit/ProtocolManagement.t.sol#L148) | Neither owner nor guardian: `Unauthorized` |
-| [`test_roles_onlyOwnerWithdrawsReserves`](../../test/unit/ProtocolManagement.t.sol#L154) | The guardian, the other privileged role, still cannot withdraw reserves |
+| [`test_roles_renounceOwnershipIsDisabled`](../../test/unit/ProtocolManagement.t.sol#L156) | The owner's `renounceOwnership` reverts `RenounceOwnershipDisabled`, the owner is unchanged, and it still clears a pause the guardian set |
+| [`test_roles_onlyOwnerWithdrawsReserves`](../../test/unit/ProtocolManagement.t.sol#L170) | The guardian, the other privileged role, still cannot withdraw reserves |
 
-The guardian can only add flags (the new set must be a superset of the current one); only the owner can clear. Reserve withdrawal is owner-exclusive.
+The guardian can only add flags (the new set must be a superset of the current one); only the owner can clear, and since renouncing is disabled there is always an owner to do it. Reserve withdrawal is owner-exclusive.
 
 ---
 
@@ -41,10 +42,10 @@ The guardian can only add flags (the new set must be a superset of the current o
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_constructor_revertsWhenCoverageConditionFails`](../../test/unit/ProtocolManagement.t.sol#L176) | **INV-13.** A `liquidationFactor` below `liquidateCF * (1 + maxConfidenceBps)` (86% < 86.7% floor at 200 bps) reverts `InvalidConfiguration("coverage")` |
-| [`test_constructor_acceptsCoverageAtTheFloor`](../../test/unit/ProtocolManagement.t.sol#L184) | Exactly at the floor (86.7%) is accepted: the bound is `>=`, rounded up |
-| [`test_constructor_coverageFloorTracksOracleConfidence`](../../test/unit/ProtocolManagement.t.sol#L191) | A wider oracle band (10%) raises the floor to 93.5%, so the reference 93% factor now fails: the floor tracks `MAX_CONFIDENCE_BPS` read from the oracle |
-| [`test_constructor_revertsOnBorrowCFAboveLiquidateCF`](../../test/unit/ProtocolManagement.t.sol#L199) | INV-12: `borrowCF` must be strictly below `liquidateCF` |
-| [`test_constructor_revertsOnZeroSupplyCap`](../../test/unit/ProtocolManagement.t.sol#L206) | A zero supply cap is rejected |
+| [`test_constructor_revertsWhenCoverageConditionFails`](../../test/unit/ProtocolManagement.t.sol#L192) | **INV-13.** A `liquidationFactor` below `liquidateCF * (1 + maxConfidenceBps)` (86% < 86.7% floor at 200 bps) reverts `InvalidConfiguration("coverage")` |
+| [`test_constructor_acceptsCoverageAtTheFloor`](../../test/unit/ProtocolManagement.t.sol#L200) | Exactly at the floor (86.7%) is accepted: the bound is `>=`, rounded up |
+| [`test_constructor_coverageFloorTracksOracleConfidence`](../../test/unit/ProtocolManagement.t.sol#L207) | A wider oracle band (10%) raises the floor to 93.5%, so the reference 93% factor now fails: the floor tracks `MAX_CONFIDENCE_BPS` read from the oracle |
+| [`test_constructor_revertsOnBorrowCFAboveLiquidateCF`](../../test/unit/ProtocolManagement.t.sol#L215) | INV-12: `borrowCF` must be strictly below `liquidateCF` |
+| [`test_constructor_revertsOnZeroSupplyCap`](../../test/unit/ProtocolManagement.t.sol#L222) | A zero supply cap is rejected |
 
 INV-13 (absorb coverage, Guide 2 Section 8): a promptly absorbed account, eligible at the high confidence edge, must still credit enough at the mid price to cover its debt. The worst case widens `liquidateCF` by the oracle's max confidence, so the constructor requires `liquidationFactor >= liquidateCF * (FACTOR_SCALE + MAX_CONFIDENCE_BPS) / FACTOR_SCALE`, reading the ceiling from the wired oracle.

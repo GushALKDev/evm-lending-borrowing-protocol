@@ -1028,6 +1028,15 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         emit PauseFlagsSet(msg.sender, flags);
     }
 
+    /**
+     * @notice Disabled: the market must always have an owner able to clear pause flags.
+     * @dev The guardian can only add flags, so without an owner any pause it set would be permanent.
+     *      Ownership still moves through the two-step transferOwnership / acceptOwnership.
+     */
+    function renounceOwnership() public pure override {
+        revert RenounceOwnershipDisabled();
+    }
+
     /*//////////////////////////////////////////////////////////////
                           COLLATERAL HELPERS
     //////////////////////////////////////////////////////////////*/

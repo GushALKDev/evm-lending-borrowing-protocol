@@ -27,8 +27,8 @@
 | **Base supplier**    | Deposits USDC, holds lmUSDC                  | Untrusted    | Any call sequence, timing attacks, dust games                    |
 | **Borrower**         | Posts collateral, borrows USDC               | Untrusted    | Health-boundary gaming, self-liquidation attempts                |
 | **Liquidator bot**   | Calls `absorb` / `buyCollateral`             | Untrusted    | MEV, selective absorption, storefront timing                     |
-| **Owner (multisig)** | Reserve withdrawal, pause set/clear          | Trusted, bounded | Cannot touch balances, parameters, or code ([Guide 5, Section 6](./05-implementation.md#6-access-control-matrix)) |
-| **Pause guardian**   | Pause set only                               | Semi-trusted | Can freeze flows (including absorb); cannot unfreeze or steal    |
+| **Owner (multisig)** | Reserve withdrawal, pause set/clear          | Trusted, bounded | Cannot touch balances, parameters, or code ([Guide 5, Section 6](./05-implementation.md#6-access-control-matrix)); transferable in two steps, never renounceable |
+| **Pause guardian**   | Pause set only                               | Semi-trusted | Can freeze flows (including absorb); cannot unfreeze or steal. Immutable: the address cannot be rotated |
 | **Pyth publishers**  | Primary price source                         | Semi-trusted | Bounded by confidence checks, deviation anchor, staking slashing |
 | **Chainlink**        | Deviation anchor                             | Semi-trusted | A stalled anchor blocks prices (fails closed)                    |
 | **Circle (USDC)**    | Base token issuer                            | Trusted external | Can blacklist the market address or upgrade the token: accepted platform risk |
@@ -165,8 +165,8 @@ INV-14: getSupplyRate(U) <= getBorrowRate(U) for all U in [0, 1e18];
 | 12 | Dust-debt griefing (debts too small to absorb) | `minBorrow` (INV-10)                                                             | Structural          |
 | 13 | Unbounded loops                    | Health/absorb iterate the `assetsIn` bitmap: at most the number of listed collaterals (2)   | Structural          |
 | 14 | Index overflow                     | `uint64` at `1e15` reverts on overflow (checked math) rather than wrapping; bound analyzed in [Guide 5, Section 2](./05-implementation.md#2-core-data-structures) | Accepted (revert-safe) |
-| 15 | Owner key compromise               | Powers bounded to reserves + pause; no parameter, code, or balance access ([Guide 5, Section 6](./05-implementation.md#6-access-control-matrix)) | Bounded |
-| 16 | Guardian key compromise            | Can pause (including absorb) but never unpause-block the owner, steal, or reconfigure; worst case converts to Scenario S2-style delayed absorption | Bounded |
+| 15 | Owner key compromise               | Powers bounded to reserves + pause; no parameter, code, or balance access ([Guide 5, Section 6](./05-implementation.md#6-access-control-matrix)). `renounceOwnership` always reverts (`RenounceOwnershipDisabled`), so a renounce cannot leave the market without an owner able to clear pauses (a compromised owner key could still hand ownership to an address nobody controls, which is the same end state as losing the key) | Bounded |
+| 16 | Guardian key compromise            | Can pause (including absorb) but cannot unpause, steal, or reconfigure, and the owner can always clear what it set; worst case converts to Scenario S2-style delayed absorption. **Residual:** `GUARDIAN` is immutable and cannot be rotated, so a compromised key can re-pause after every owner clear and a lost key leaves the market with no fast pauser. The only remedy is migrating to a redeployment with a new guardian | Bounded, residual accepted |
 | 17 | USDC blacklist of the market       | None possible on-chain; accepted platform risk, disclosed in the threat model               | Accepted            |
 | 18 | Pyth fee griefing (underpaid updates) | `InsufficientFee` revert + surplus refund path; caller funds their own update           | Structural          |
 

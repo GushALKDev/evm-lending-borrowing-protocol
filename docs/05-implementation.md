@@ -313,6 +313,7 @@ error InsufficientReserves(int256 reserves, uint256 requested);
 // Access and configuration
 error Unauthorized(address caller);
 error GuardianCannotUnpause(uint8 current, uint8 requested);
+error RenounceOwnershipDisabled();
 error InvalidConfiguration(bytes32 what);
 
 // PythChainlinkOracle
@@ -328,7 +329,7 @@ error InsufficientFee(uint256 provided, uint256 required);
 
 ## 6. Access Control Matrix
 
-Roles: **PUBLIC** (anyone), **OWNER** (`Ownable2Step` multisig), **GUARDIAN** (pause-only address set at deployment).
+Roles: **PUBLIC** (anyone), **OWNER** (`Ownable2Step` multisig, transferable in two steps but never renounceable, so a guardian pause can always be cleared), **GUARDIAN** (pause-only address, immutable from deployment: it cannot be rotated).
 
 ### LendingMarket.sol
 
@@ -344,6 +345,7 @@ Roles: **PUBLIC** (anyone), **OWNER** (`Ownable2Step` multisig), **GUARDIAN** (p
 | `withdrawReserves`   | ❌     | ✅    | -        | -                 |
 | `setPauseFlags`      | ❌     | ✅ (set/clear) | ✅ (set only) | -        |
 | `transferOwnership` / `acceptOwnership` | ❌ | ✅ (2-step) | - | -            |
+| `renounceOwnership`  | ❌     | ❌ (always reverts `RenounceOwnershipDisabled`) | - | - |
 
 ### InterestRateModel.sol / PythChainlinkOracle.sol
 

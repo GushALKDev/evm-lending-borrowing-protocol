@@ -151,6 +151,22 @@ contract ProtocolManagementTest is Test {
         market.setPauseFlags(PAUSE_SUPPLY);
     }
 
+    /// @dev Renouncing would leave nobody able to clear a guardian pause. The owner's call reverts and
+    ///      ownership, with it the power to unpause, is unchanged.
+    function test_roles_renounceOwnershipIsDisabled() public {
+        vm.prank(guardian);
+        market.setPauseFlags(PAUSE_SUPPLY);
+
+        vm.prank(owner);
+        vm.expectRevert(ILendingMarket.RenounceOwnershipDisabled.selector);
+        market.renounceOwnership();
+
+        assertEq(market.owner(), owner, "owner unchanged");
+        vm.prank(owner);
+        market.setPauseFlags(0);
+        assertEq(market.getMarketState().pauseFlags, 0, "owner can still clear the guardian's pause");
+    }
+
     function test_roles_onlyOwnerWithdrawsReserves() public {
         _seedReserves(10_000e6);
         // Even the guardian, the other privileged role, cannot withdraw reserves.
