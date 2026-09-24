@@ -103,6 +103,47 @@ contract SupplyWithdrawTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
+                               SUPPLY TO
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev The payer and the credited account are distinct: bob pays, alice is credited, and the
+    ///      domain event and the mint mirror both name the destination.
+    function test_supplyTo_creditsTheDestinationFromTheCaller() public {
+        uint256 bobWallet = base.balanceOf(bob);
+
+        vm.expectEmit(true, false, false, true, address(market));
+        emit ILendingMarket.Supply(alice, 10_000e6);
+        vm.expectEmit(true, true, true, true, address(market));
+        emit ILendingMarket.Transfer(address(0), alice, 10_000e6);
+
+        vm.prank(bob);
+        market.supplyTo(alice, address(base), 10_000e6);
+
+        assertEq(market.balanceOf(alice), 10_000e6, "destination credited");
+        assertEq(market.balanceOf(bob), 0, "payer not credited");
+        assertEq(bobWallet - base.balanceOf(bob), 10_000e6, "tokens pulled from the payer");
+    }
+
+    function test_supplyTo_collateralCreditsTheDestination() public {
+        weth.mint(bob, 5e18);
+        vm.startPrank(bob);
+        weth.approve(address(market), 5e18);
+        market.supplyTo(alice, address(weth), 5e18);
+        vm.stopPrank();
+
+        assertEq(market.userCollateral(alice, address(weth)), 5e18, "destination holds the collateral");
+        assertEq(market.userCollateral(bob, address(weth)), 0, "payer holds none");
+        assertEq(market.getAssetsIn(alice), 1, "destination bitmap set");
+        assertEq(weth.balanceOf(bob), 0, "tokens pulled from the payer");
+    }
+
+    function test_supplyTo_revertsOnZeroDestination() public {
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InvalidRecipient.selector, address(0)));
+        market.supplyTo(address(0), address(base), 1_000e6);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                           WITHDRAW BASE (3.3)
     //////////////////////////////////////////////////////////////*/
 

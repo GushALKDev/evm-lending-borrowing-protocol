@@ -102,6 +102,7 @@ graph TD
 | Function                                                   | Access          | Price needed | Description                                                                 |
 | :--------------------------------------------------------- | :-------------- | :----------- | :-------------------------------------------------------------------------- |
 | `supply(asset, amount)`                                    | Public          | No           | Supply base (credits principal, repays debt first if negative) or collateral |
+| `supplyTo(dst, asset, amount)`                             | Public          | No           | Same as `supply`, crediting `dst` with the caller's tokens (repay or top up another account) |
 | `withdraw(asset, amount, priceUpdate)`                     | Public, payable | Yes*         | Withdraw base (borrows past zero) or collateral                              |
 | `absorb(account, priceUpdate)`                             | Public, payable | Yes          | Absorb an underwater account: wipe debt, seize collateral into the protocol  |
 | `buyCollateral(asset, minAmount, baseAmount, recipient, priceUpdate)` | Public, payable | Yes | Buy protocol-held collateral at a discount, paying base                      |
@@ -354,13 +355,15 @@ sequenceDiagram
     User->>Market: supply(USDC, amount)
     Market->>IRM: getSupplyRate(U), getBorrowRate(U)
     Market->>Market: accrue() (advance indexes)
-    Market->>Market: Checks: not paused, amount > 0
+    Market->>Market: Checks: amount > 0; if PAUSE_SUPPLY:<br/>dst in debt and amount <= debt
     Note over Market: EFFECTS<br/>newPV = presentValue(principal) + amount<br/>principal = principalValue(newPV)<br/>update totalSupplyBase / totalBorrowBase<br/>(split across the sign crossing)
     Market->>USDC: transferFrom(user, market, amount)
     Market-->>User: emit Supply(user, amount) (+ Transfer mint if PV supply increased)
 ```
 
-- `amount == type(uint256).max` repays the full debt exactly, avoiding dust from the debt growing between quote and inclusion.
+- `amount == type(uint256).max` repays the full debt exactly, avoiding dust from the debt growing between quote and inclusion. It resolves after the call's own accrual and works whether or not supply is paused.
+- `supplyTo(dst, ...)` runs the same path with the caller as payer and `dst` as the account credited; `supply` is `supplyTo(msg.sender, ...)`.
+- While `PAUSE_SUPPLY` is set only the repay case runs: `dst` must be in debt, and an amount above the debt (which would cross into supply) reverts `RepayExceedsDebtWhilePaused`. Pure supply and sign-crossing stay blocked ([Section 7.5](#75-granular-pausability)).
 - No oracle interaction: supplying base can only improve health.
 
 ### 6.2 Supply Collateral
@@ -373,11 +376,13 @@ sequenceDiagram
 
     User->>Market: supply(WETH, amount)
     Market->>Market: accrue()
-    Market->>Market: Checks: asset is listed collateral,<br/>totalsCollateral + amount <= supplyCap
+    Market->>Market: Checks: asset is listed collateral,<br/>if PAUSE_SUPPLY: dst in debt,<br/>totalsCollateral + amount <= supplyCap
     Note over Market: EFFECTS<br/>userCollateral[user][WETH] += amount<br/>totalsCollateral[WETH] += amount<br/>set assetsIn bit
     Market->>WETH: transferFrom(user, market, amount)
     Market-->>User: emit SupplyCollateral(user, WETH, amount)
 ```
+
+While `PAUSE_SUPPLY` is set, collateral can still be posted to an account in debt (a top-up that can only raise its health), under the same supply cap; posting to an account without debt stays blocked.
 
 Collateral earns no interest and cannot be borrowed: it is inert custody, valued only inside health checks. That isolation is the core Comet property (see [ADR-1](#adr-1-single-borrowable-base-vs-cross-collateral-pool)).
 

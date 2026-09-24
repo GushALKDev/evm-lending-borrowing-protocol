@@ -442,29 +442,55 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc ILendingMarket
-    function supply(address asset, uint256 amount) external nonReentrant notPaused(PAUSE_SUPPLY) {
+    function supply(address asset, uint256 amount) external nonReentrant {
+        _supply(msg.sender, asset, amount);
+    }
+
+    /// @inheritdoc ILendingMarket
+    function supplyTo(address dst, address asset, uint256 amount) external nonReentrant {
+        if (dst == address(0)) revert InvalidRecipient(dst);
+        _supply(dst, asset, amount);
+    }
+
+    /**
+     * @notice Shared body of supply and supplyTo: tokens are pulled from msg.sender, dst is credited.
+     * @dev PAUSE_SUPPLY stops new exposure, not risk reduction. While it is set, only a repay of dst's
+     *      debt or a collateral top-up of an indebted dst runs, so a pause can never leave a borrower
+     *      absorbable yet unable to defend the position. Both checks run after accrual, so the repay
+     *      bound is the debt as it stands at execution, not as it stood when the caller signed.
+     * @param dst Account whose position is credited.
+     * @param asset Base asset or a listed collateral asset.
+     * @param amount Amount in the asset's native decimals.
+     */
+    function _supply(address dst, address asset, uint256 amount) internal {
         _accrue();
+        bool paused = marketState.pauseFlags & PAUSE_SUPPLY != 0;
         if (asset == BASE_TOKEN) {
-            _supplyBase(msg.sender, amount);
+            _supplyBase(dst, amount, paused);
         } else {
-            _supplyCollateral(msg.sender, asset, amount);
+            _supplyCollateral(dst, asset, amount, paused);
         }
     }
 
     /**
      * @notice Credits base supply (repaying debt first if the account is negative).
-     * @dev type(uint256).max repays the full current debt exactly and supplies nothing beyond it.
+     * @dev type(uint256).max repays the full current debt exactly and supplies nothing beyond it. While
+     *      supply is paused only a repay runs: the account must owe, and the amount may not exceed the
+     *      debt, since the excess would open new supply exposure.
      */
-    function _supplyBase(address account, uint256 amount) internal {
+    function _supplyBase(address account, uint256 amount, bool paused) internal {
         int104 oldPrincipal = userBasic[account].principal;
+        uint256 debt = _presentValueBorrow(_borrowPart(oldPrincipal));
+
+        if (paused && debt == 0) revert Paused(PAUSE_SUPPLY);
 
         // Full-repay sentinel: cap the pulled amount at exactly the outstanding debt.
         if (amount == type(uint256).max) {
-            uint256 debt = _presentValueBorrow(_borrowPart(oldPrincipal));
             if (debt == 0) revert ZeroAmount();
             amount = debt;
         }
         if (amount == 0) revert ZeroAmount();
+        if (paused && amount > debt) revert RepayExceedsDebtWhilePaused(amount, debt);
 
         int256 newBalance = _presentValue(oldPrincipal) + amount.toInt256();
         int104 newPrincipal = _principalValue(newBalance);
@@ -485,9 +511,12 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Posts collateral into inert custody, enforcing the per-asset supply cap.
+     * @dev While supply is paused only an indebted account may be topped up: collateral can only raise
+     *      its health. The supply cap binds regardless of the pause.
      */
-    function _supplyCollateral(address account, address asset, uint256 amount) internal {
+    function _supplyCollateral(address account, address asset, uint256 amount, bool paused) internal {
         CollateralConfig memory config = _requireListed(asset);
+        if (paused && userBasic[account].principal >= 0) revert Paused(PAUSE_SUPPLY);
         if (amount == 0) revert ZeroAmount();
 
         uint128 amount128 = amount.toUint128();

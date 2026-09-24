@@ -34,6 +34,7 @@ contract BorrowRepayTest is Test {
 
     uint128 internal constant WETH_CAP = 1_000e18;
     uint256 internal constant MIN_BORROW = 100e6;
+    uint8 internal constant PAUSE_SUPPLY = 1 << 0;
 
     /// @dev Capacity of the reference position: 10 WETH * 2,000 USD * 80%.
     uint256 internal constant REFERENCE_CAPACITY_USD = 16_000e18;
@@ -582,18 +583,184 @@ contract BorrowRepayTest is Test {
         market.withdraw(address(base), 5_000e6, new bytes[](0));
     }
 
-    /// @dev Pausing supply also pauses repayment. That is the accepted consequence of the shared
-    ///      entry point, recorded here so the coupling is visible rather than discovered later.
-    function test_pause_supplyFlagAlsoBlocksRepayment() public {
+    /*//////////////////////////////////////////////////////////////
+                 PAUSE_SUPPLY: RISK-REDUCING SUPPLY STAYS OPEN
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Pauses supply as the guardian would in an incident.
+    function _pauseSupply() internal {
+        vm.prank(guardian);
+        market.setPauseFlags(PAUSE_SUPPLY);
+    }
+
+    function test_pausedSupply_fullRepayCloses() public {
         _postReferenceCollateral();
         _borrow(5_000e6);
-
-        vm.prank(guardian);
-        market.setPauseFlags(1 << 0); // PAUSE_SUPPLY
+        _pauseSupply();
 
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, uint8(1 << 0)));
+        market.supply(address(base), 5_000e6);
+
+        assertEq(market.borrowBalanceOf(alice), 0, "debt closed while paused");
+        assertEq(market.getPrincipal(alice), 0, "no supply opened");
+    }
+
+    function test_pausedSupply_partialRepayReducesDebt() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+
+        vm.prank(alice);
+        market.supply(address(base), 2_000e6);
+
+        assertEq(market.borrowBalanceOf(alice), 3_000e6, "debt reduced while paused");
+    }
+
+    function test_pausedSupply_overRepayReverts() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(ILendingMarket.RepayExceedsDebtWhilePaused.selector, 5_000e6 + 1, 5_000e6)
+        );
+        market.supply(address(base), 5_000e6 + 1);
+    }
+
+    /// @dev The sentinel resolves against the debt as accrued inside the call, so a repay signed
+    ///      before the interest landed still closes the position exactly. 1e10 per second over
+    ///      365 days grows the borrow index by 31.536%: 5,000 * 1.31536 = 6,576.8 USDC.
+    function test_pausedSupply_repayAllSentinelClearsAccruedDebt() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+
+        irm.setRates(1e10, 0);
+        vm.warp(block.timestamp + 365 days);
+
+        uint256 walletBefore = base.balanceOf(alice);
+        vm.prank(alice);
+        market.supply(address(base), type(uint256).max);
+
+        assertEq(walletBefore - base.balanceOf(alice), 6_576_800_000, "pulled exactly the accrued debt");
+        assertEq(market.borrowBalanceOf(alice), 0, "debt closed");
+        assertEq(market.getPrincipal(alice), 0, "no supply opened");
+    }
+
+    /// @dev The bound is the debt after the call's own accrual, not the stale stored one: 6,000 USDC
+    ///      exceeds the pre-accrual 5,000 but is a valid partial repay, and one wei over the accrued
+    ///      6,576.8 is the first amount refused.
+    function test_pausedSupply_repayBoundIsTheAccruedDebt() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+
+        irm.setRates(1e10, 0);
+        vm.warp(block.timestamp + 365 days);
+        assertEq(market.borrowBalanceOf(alice), 5_000e6, "stored debt is still pre-accrual");
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(ILendingMarket.RepayExceedsDebtWhilePaused.selector, 6_576_800_001, 6_576_800_000)
+        );
+        market.supply(address(base), 6_576_800_001);
+
+        vm.prank(alice);
+        market.supply(address(base), 6_000e6);
+        // 576.8 USDC remain; re-deriving the principal rounds up twice, so the debt reads 2 wei higher.
+        assertEq(market.borrowBalanceOf(alice), 576_800_002, "partial repay against the accrued debt");
+    }
+
+    /// @dev The pause is evaluated on the destination, not the payer: bob is a supplier, so a supply
+    ///      to bob is blocked, yet bob can repay alice's debt. The reverse is refused: a debtor
+    ///      cannot add supply to a non-debtor.
+    function test_pausedSupply_repayOnBehalfUsesTheDestination() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_SUPPLY));
         market.supply(address(base), 1_000e6);
+
+        uint256 bobWallet = base.balanceOf(bob);
+        uint256 bobSupply = market.balanceOf(bob);
+        vm.prank(bob);
+        market.supplyTo(alice, address(base), type(uint256).max);
+
+        assertEq(market.borrowBalanceOf(alice), 0, "alice's debt repaid by bob");
+        assertEq(bobWallet - base.balanceOf(bob), 5_000e6, "bob paid exactly alice's debt");
+        assertEq(market.balanceOf(bob), bobSupply, "bob's own position untouched");
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_SUPPLY));
+        market.supplyTo(bob, address(base), 1_000e6);
+    }
+
+    function test_pausedSupply_baseSupplyToANonDebtorReverts() public {
+        _pauseSupply();
+
+        // Positive principal: bob is a supplier.
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_SUPPLY));
+        market.supply(address(base), 1_000e6);
+
+        // Zero principal: the sentinel reports the pause, not ZeroAmount.
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_SUPPLY));
+        market.supply(address(base), type(uint256).max);
+    }
+
+    function test_pausedSupply_debtorCanTopUpCollateral() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+
+        vm.prank(alice);
+        market.supply(address(weth), 5e18);
+
+        assertEq(market.userCollateral(alice, address(weth)), 15e18, "collateral topped up while paused");
+        assertEq(market.totalsCollateral(address(weth)), 15e18, "totals track the top-up");
+    }
+
+    /// @dev Alice has posted collateral but holds no debt, so a top-up adds exposure, not health.
+    function test_pausedSupply_nonDebtorCollateralSupplyReverts() public {
+        _postReferenceCollateral();
+        _pauseSupply();
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.Paused.selector, PAUSE_SUPPLY));
+        market.supply(address(weth), 1e18);
+    }
+
+    function test_pausedSupply_supplyCapStillBindsForADebtor() public {
+        _postReferenceCollateral();
+        _borrow(5_000e6);
+        _pauseSupply();
+
+        weth.mint(alice, WETH_CAP);
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(ILendingMarket.SupplyCapExceeded.selector, address(weth), WETH_CAP, WETH_CAP + 10e18)
+        );
+        market.supply(address(weth), WETH_CAP);
+    }
+
+    /// @dev The pause no longer strands a borrower, and it does not shield one either: absorb keeps
+    ///      running on an underwater account while supply is paused. At 1,700 the reference position
+    ///      has 10 * 1,700 * 85% = 14,450 USD of liquidation capacity against 15,000 of debt.
+    function test_pausedSupply_absorbStillRuns() public {
+        _postReferenceCollateral();
+        _borrow(15_000e6);
+        _pauseSupply();
+        oracle.setPrice(address(weth), 1_700e18, 0);
+
+        vm.prank(bob);
+        market.absorb(alice, new bytes[](0));
+
+        assertEq(market.borrowBalanceOf(alice), 0, "absorbed while supply is paused");
+        assertEq(market.userCollateral(alice, address(weth)), 0, "collateral seized");
     }
 
     /*//////////////////////////////////////////////////////////////

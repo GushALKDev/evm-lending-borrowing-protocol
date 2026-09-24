@@ -122,6 +122,7 @@ uint8 constant PAUSE_BUY      = 1 << 4;
 ```solidity
 interface ILendingMarket {
     function supply(address asset, uint256 amount) external;
+    function supplyTo(address dst, address asset, uint256 amount) external;
     function withdraw(address asset, uint256 amount, bytes[] calldata priceUpdate) external payable;
     function absorb(address account, bytes[] calldata priceUpdate) external payable;
     function buyCollateral(address asset, uint256 minAmount, uint256 baseAmount, address recipient, bytes[] calldata priceUpdate) external payable;
@@ -144,12 +145,15 @@ interface ILendingMarket {
 
 Plus the standard ERC-20 surface (`transfer`, `transferFrom`, `approve`, `allowance`, `name`, `symbol`, `decimals = 6`).
 
-#### `supply(asset, amount)`
+#### `supply(asset, amount)` and `supplyTo(dst, asset, amount)`
+
+`supply` is `supplyTo(msg.sender, asset, amount)`. Tokens are always pulled from the caller; `dst` is the account credited, so anyone can repay or top up another account's position.
 
 | Contract        | Statement                                                                                          |
 | :--------------- | :--------------------------------------------------------------------------------------------------- |
-| Preconditions   | `amount > 0`; asset is base or listed collateral; `PAUSE_SUPPLY` clear; for collateral: `totalsCollateral + amount <= supplyCap`; caller approved this contract for `amount` |
-| Effects (base)  | Accrues; `principal` increases through the single accounting path (repay branch first if negative); `amount == type(uint256).max` while in debt repays exactly the full debt |
+| Preconditions   | `amount > 0`; `dst != address(0)` (`InvalidRecipient`); asset is base or listed collateral; for collateral: `totalsCollateral + amount <= supplyCap`, paused or not; caller approved this contract for `amount` |
+| Pause (`PAUSE_SUPPLY`) | Blocks new exposure, never risk reduction. Evaluated on `dst` after accrual. Base: allowed only if `dst` is in debt and `amount <= debt` (else `RepayExceedsDebtWhilePaused(amount, debt)`); a non-debtor `dst` reverts `Paused`. Collateral: allowed only if `dst` is in debt; otherwise `Paused` |
+| Effects (base)  | Accrues; `principal` increases through the single accounting path (repay branch first if negative); `amount == type(uint256).max` while in debt repays exactly the full debt as accrued at execution (the Comet convention), paused or not, so a repay signed before interest landed still closes the position |
 | Effects (collateral) | `userCollateral` and `totalsCollateral` increase by `amount`; `assetsIn` bit set              |
 | Postconditions  | Account health weakly improved; reserves weakly increased ([Guide 2, Section 6](./02-mathematics.md#6-interest-split-and-reserve-growth)); tokens pulled last (CEI) |
 | Oracle          | Never consulted                                                                                    |
@@ -296,6 +300,7 @@ error InsufficientCash(uint256 requested, uint256 available);
 // LendingMarket: health and debt
 error NotCollateralized(address account, uint256 debtUSD, uint256 capacityUSD);
 error MinBorrowNotMet(uint256 borrowPV, uint256 minBorrow);
+error RepayExceedsDebtWhilePaused(uint256 amount, uint256 debt);
 error NotLiquidatable(address account, uint256 debtUSD, uint256 liqCapacityUSD);
 error TransferWouldBorrow(address from, uint256 balance, uint256 amount);
 
@@ -329,7 +334,7 @@ Roles: **PUBLIC** (anyone), **OWNER** (`Ownable2Step` multisig), **GUARDIAN** (p
 
 | Function             | PUBLIC | OWNER | GUARDIAN | Pause gate        |
 | :-------------------- | :----- | :---- | :------- | :----------------- |
-| `supply`             | ✅     | -     | -        | `PAUSE_SUPPLY`    |
+| `supply` / `supplyTo` | ✅    | -     | -        | `PAUSE_SUPPLY`, except a repay of an indebted `dst` (up to its debt) and a collateral top-up of an indebted `dst` |
 | `withdraw`           | ✅     | -     | -        | `PAUSE_WITHDRAW`  |
 | `transfer` / `transferFrom` | ✅ | -   | -        | `PAUSE_TRANSFER`  |
 | `absorb`             | ✅     | -     | -        | `PAUSE_ABSORB` (last resort, see [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy)) |

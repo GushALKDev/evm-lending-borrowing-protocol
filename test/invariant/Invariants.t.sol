@@ -82,7 +82,7 @@ contract InvariantsTest is Test {
 
         // Only the handler drives state; target its action functions.
         targetContract(address(handler));
-        bytes4[] memory selectors = new bytes4[](12);
+        bytes4[] memory selectors = new bytes4[](14);
         selectors[0] = handler.supplyBase.selector;
         selectors[1] = handler.withdrawBase.selector;
         selectors[2] = handler.supplyCollateral.selector;
@@ -95,6 +95,8 @@ contract InvariantsTest is Test {
         selectors[9] = handler.movePrice.selector;
         selectors[10] = handler.togglePause.selector;
         selectors[11] = handler.supplyBase.selector; // weight supply so the pool stays funded
+        selectors[12] = handler.guardianPause.selector;
+        selectors[13] = handler.repayWhileSupplyPaused.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 
@@ -308,6 +310,20 @@ contract InvariantsTest is Test {
     function invariant_absorbOnlyWhenLiquidatable() public view {
         assertFalse(handler.absorbedWhileHealthy(), "absorb succeeded on a healthy account");
         assertFalse(handler.eligibleButNotAbsorbed(), "absorb rejected an account the view reported eligible");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    REPAY STAYS OPEN UNDER PAUSE_SUPPLY
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev While PAUSE_SUPPLY is set, a debtor with tokens and approval can always repay: every repay
+    ///      the handler attempted under the pause (partial, exact, or the full-debt sentinel, from the
+    ///      debtor or a third party) succeeded.
+    function invariant_repayAlwaysAvailableWhileSupplyPaused() public view {
+        assertFalse(
+            handler.repayBlockedWhilePaused(),
+            string.concat("repay refused under PAUSE_SUPPLY: ", vm.toString(handler.repayBlockedReason()))
+        );
     }
 
     /*//////////////////////////////////////////////////////////////

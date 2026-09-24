@@ -73,7 +73,7 @@ interface ILendingMarket {
 
     /**
      * @notice Collateral posted into the market.
-     * @param from Account posting the collateral.
+     * @param from Account credited with the collateral (the supplyTo destination).
      * @param asset Collateral asset supplied.
      * @param amount Amount in the asset's native decimals.
      */
@@ -150,6 +150,7 @@ interface ILendingMarket {
 
     error NotCollateralized(address account, uint256 debtUSD, uint256 capacityUSD);
     error MinBorrowNotMet(uint256 borrowPV, uint256 minBorrow);
+    error RepayExceedsDebtWhilePaused(uint256 amount, uint256 debt);
     error NotLiquidatable(address account, uint256 debtUSD, uint256 liqCapacityUSD);
     error TransferWouldBorrow(address from, uint256 balance, uint256 amount);
     error InsufficientAllowance(address owner, address spender, uint256 allowance, uint256 amount);
@@ -177,12 +178,28 @@ interface ILendingMarket {
 
     /**
      * @notice Supplies base (crediting supply, repaying debt first if the account is negative) or
-     *         collateral. Never consults the oracle: supplying can only improve health.
+     *         collateral to the caller's own account. Never consults the oracle: supplying can only
+     *         improve health.
+     * @dev Equivalent to supplyTo(msg.sender, asset, amount), including its PAUSE_SUPPLY semantics.
      * @param asset Base asset or a listed collateral asset.
      * @param amount Amount in the asset's native decimals. For base, type(uint256).max repays the
-     *        full debt exactly and supplies nothing beyond it.
+     *        full debt exactly (as accrued at execution) and supplies nothing beyond it.
      */
     function supply(address asset, uint256 amount) external;
+
+    /**
+     * @notice Supplies base or collateral to `dst`, pulling the tokens from the caller. Lets anyone
+     *         repay or top up another account's position.
+     * @dev PAUSE_SUPPLY blocks new exposure, never risk reduction. While it is set, a base supply runs
+     *      only if dst is in debt and the amount does not exceed that debt (else
+     *      RepayExceedsDebtWhilePaused), and a collateral supply runs only if dst is in debt; the
+     *      supply cap still binds. Both conditions are evaluated on dst after accrual.
+     * @param dst Account credited, must be non-zero.
+     * @param asset Base asset or a listed collateral asset.
+     * @param amount Amount in the asset's native decimals. For base, type(uint256).max repays dst's
+     *        full debt exactly (as accrued at execution) and supplies nothing beyond it.
+     */
+    function supplyTo(address dst, address asset, uint256 amount) external;
 
     /**
      * @notice Withdraws base (opening or increasing a borrow past zero) or collateral.

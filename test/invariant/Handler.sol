@@ -13,9 +13,11 @@ import {MockPriceOracle} from "../mocks/MockPriceOracle.sol";
  * @notice Drives the market through bounded random sequences for the invariant suite (Guide 6). A
  *         fixed cast of actors (3 suppliers, 3 borrowers, 1 liquidator, owner, guardian) exercises
  *         every mutating function, plus `warp` (time jumps) and `movePrice` (oracle steps within and
- *         beyond the confidence band). Ghost variables track base inflows/outflows for cash
- *         conservation (INV-5), and latches record per-action violations (the INV-4 reserve table,
- *         INV-9, INV-10, absorb eligibility, unexpected reverts) for the invariant contract to assert.
+ *         beyond the confidence band). Pause flags are set by both the owner and the guardian, and
+ *         repays are attempted while PAUSE_SUPPLY is set. Ghost variables track base inflows/outflows
+ *         for cash conservation (INV-5), and latches record per-action violations (the INV-4 reserve
+ *         table, INV-9, INV-10, absorb eligibility, a repay refused under the pause, unexpected
+ *         reverts) for the invariant contract to assert.
  * @dev Bounds are chosen so most calls succeed; `fail_on_revert` is off in the suite, so a reverting
  *      call (e.g. an undercollateralized borrow) is a valid no-op, not a failure, provided its reason
  *      is one of the market's own declared errors (see _checkRevert).
@@ -59,10 +61,15 @@ contract Handler is Test {
     bool public unexpectedRevert;
     bytes public unexpectedRevertReason;
 
+    // --- Repay under PAUSE_SUPPLY ---
+    bool public repayBlockedWhilePaused;
+    bytes public repayBlockedReason;
+
     // The market's declared errors: the only acceptable reasons for a handler call to revert. Anything
     // else (a panic, an empty revert, a token error) means an input reached a path it should not.
     mapping(bytes4 => bool) internal expectedError;
 
+    uint8 internal constant PAUSE_SUPPLY = 1 << 0;
     uint8 internal constant PAUSE_ABSORB = 1 << 3;
 
     constructor(
@@ -94,7 +101,7 @@ contract Handler is Test {
         }
         allActors.push(_liquidator);
 
-        bytes4[20] memory errors = [
+        bytes4[21] memory errors = [
             ILendingMarket.Paused.selector,
             ILendingMarket.ZeroAmount.selector,
             ILendingMarket.UnknownAsset.selector,
@@ -105,6 +112,7 @@ contract Handler is Test {
             ILendingMarket.RefundFailed.selector,
             ILendingMarket.NotCollateralized.selector,
             ILendingMarket.MinBorrowNotMet.selector,
+            ILendingMarket.RepayExceedsDebtWhilePaused.selector,
             ILendingMarket.NotLiquidatable.selector,
             ILendingMarket.TransferWouldBorrow.selector,
             ILendingMarket.InsufficientAllowance.selector,
@@ -338,11 +346,66 @@ contract Handler is Test {
 
     function togglePause(uint256 flagsRaw) external {
         uint8 flags = uint8(bound(flagsRaw, 0, 31));
-        // Guardian can only add; use the owner so the fuzzer can also clear, exercising both.
+        // The owner can both set and clear, so this is the action that lifts pauses.
         vm.prank(owner);
         try market.setPauseFlags(flags) {}
         catch (bytes memory reason) {
             _checkRevert(reason);
         }
+    }
+
+    /// @dev The guardian can only add flags, so one random flag is OR-ed onto the current set. One flag
+    ///      at a time keeps the market from spending most of a run fully paused before the owner clears.
+    function guardianPause(uint256 flagRaw) external {
+        uint8 flags = uint8(1 << bound(flagRaw, 0, 4)) | market.getMarketState().pauseFlags;
+        vm.prank(guardian);
+        try market.setPauseFlags(flags) {}
+        catch (bytes memory reason) {
+            _checkRevert(reason);
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        REPAY UNDER PAUSE_SUPPLY
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A debtor with tokens and approval can always repay while PAUSE_SUPPLY is set. The action
+    ///      sets the pause itself as the guardian, so the property is exercised on every call rather
+    ///      than only when a random toggle happens to land on it, and the owner restores the previous
+    ///      flags afterwards so the rest of the run is not left paused. It repays a partial or exact
+    ///      amount, or the full-debt sentinel one call in four, from the debtor or a third-party payer,
+    ///      and latches any revert: under these preconditions no revert is acceptable.
+    function repayWhileSupplyPaused(uint256 borrowerSeed, uint256 payerSeed, uint256 amount) external {
+        address debtor = _borrower(borrowerSeed);
+        address payer = _actor(payerSeed);
+        market.accrue();
+        uint256 debt = market.borrowBalanceOf(debtor);
+        if (debt == 0) return;
+
+        uint8 flags = market.getMarketState().pauseFlags;
+        vm.prank(guardian);
+        market.setPauseFlags(flags | PAUSE_SUPPLY);
+
+        amount = amount % 4 == 0 ? type(uint256).max : bound(amount, 1, debt);
+        base.mint(payer, debt);
+        uint256 walletBefore = base.balanceOf(payer);
+        int256 reservesBefore = market.getReserves();
+
+        vm.startPrank(payer);
+        base.approve(address(market), debt);
+        try market.supplyTo(debtor, address(base), amount) {
+            uint256 paid = walletBefore - base.balanceOf(payer);
+            ghostBaseIn += paid;
+            base.burn(payer, debt - paid);
+            _checkReserves(market.getReserves() >= reservesBefore, "repayWhileSupplyPaused");
+        } catch (bytes memory reason) {
+            base.burn(payer, debt);
+            repayBlockedWhilePaused = true;
+            repayBlockedReason = reason;
+        }
+        vm.stopPrank();
+
+        vm.prank(owner);
+        market.setPauseFlags(flags);
     }
 }
