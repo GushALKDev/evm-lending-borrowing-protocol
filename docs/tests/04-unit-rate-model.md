@@ -11,7 +11,7 @@ Three suites covering the rate curve: in isolation, wired into the market, and a
 
 ---
 
-## 1. `InterestRateModel.t.sol` — 18 tests
+## 1. `InterestRateModel.t.sol` (18 tests)
 
 The curve in isolation, against the reference parameters: kink 80%, reserve factor 10%, slopes sized so the borrow rate is exactly 4% APR at the kink.
 
@@ -47,7 +47,7 @@ The documented table from [Guide 2, Section 5](../02-mathematics.md#5-jump-rate-
 
 ### Reachable Domain and Overflow
 
-The rate functions are **not clamped**. Utilization is bounded by the accounting, not by the curve, so it sits in `~[0, 1e18]`; the `fullMulDiv` overflow is many orders of magnitude beyond any constructible state, and Aave does not clamp either. These tests document that gap — they do not defend a reachable state ([Guide 5, Section 3.2](../05-implementation.md#3-interfaces-and-function-contracts)).
+The rate functions are **not clamped**. Utilization is bounded by the accounting, not by the curve, so it sits in `~[0, 1e18]`; the `fullMulDiv` overflow is many orders of magnitude beyond any constructible state, and Aave does not clamp either. These tests document that gap; they do not defend a reachable state ([Guide 5, Section 3.2](../05-implementation.md#3-interfaces-and-function-contracts)).
 
 | Test                                                                                                            | Asserts                                                                              |
 | :---------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------- |
@@ -64,7 +64,7 @@ The rate functions are **not clamped**. Utilization is bounded by the accounting
 
 ---
 
-## 2. `MarketAccrualWithRealCurve.t.sol` — 4 tests
+## 2. `MarketAccrualWithRealCurve.t.sol` (4 tests)
 
 The integration seam between market and rate model: the real `InterestRateModel` wired into `accrue()`, rather than the mock the other suites use.
 
@@ -72,12 +72,12 @@ The integration seam between market and rate model: the real `InterestRateModel`
 | :-------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
 | [`test_accrual_atKinkGrowsBorrowIndexByReferenceRate`](../../test/unit/MarketAccrualWithRealCurve.t.sol#L49)      | 800 borrowed against 1,000 supplied (U = 80%, the kink) grows the borrow index ~4% over a year and the supply index ~2.88%, matching the curve read in isolation. |
 | [`test_accrual_inJumpRegimeGrowsFaster`](../../test/unit/MarketAccrualWithRealCurve.t.sol#L67)                    | At U = 90% the borrow index grows at the 14% APR jump-regime rate: the market reads the steep branch, not just the shallow one. |
-| [`test_accrual_idleMarketDoesNotAccrue`](../../test/unit/MarketAccrualWithRealCurve.t.sol#L82)                    | With no borrows, utilization is zero, so the curve returns zero and neither index moves — the market does not manufacture interest from nothing. |
+| [`test_accrual_idleMarketDoesNotAccrue`](../../test/unit/MarketAccrualWithRealCurve.t.sol#L82)                    | With no borrows, utilization is zero, so the curve returns zero and neither index moves: the market does not manufacture interest from nothing. |
 | [`test_wiring_marketUsesTheRealModel`](../../test/unit/MarketAccrualWithRealCurve.t.sol#L94)                      | The immutable points at the deployed model.                                            |
 
 ---
 
-## 3. `AccrualOverflow.t.sol` — 3 tests
+## 3. `AccrualOverflow.t.sol` (3 tests)
 
 Pins the one multiplication in `_accrue` that sits outside `fullMulDiv`'s 512-bit intermediate: the `rate * elapsed` product. It stays checked rather than unchecked, so the failure mode is a revert, never a wrapped index.
 
@@ -85,6 +85,6 @@ Pins the one multiplication in `_accrue` that sits outside `fullMulDiv`'s 512-bi
 | :------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------- |
 | [`test_accrue_revertsWhenRateTimesElapsedOverflows`](../../test/unit/AccrualOverflow.t.sol#L39)             | At the smallest rate whose product with elapsed exceeds `uint256`, checked arithmetic panics: a revert, never a corrupted index. |
 | [`test_accrue_revertsOnIndexCastWhenRateIsMerelyAbsurd`](../../test/unit/AccrualOverflow.t.sol#L53)         | Just below that threshold the product fits but the resulting index does not fit `uint64`, and `SafeCastLib` reverts. The second guard behind the first. |
-| [`test_accrue_realisticRatesAreFarFromTheBound`](../../test/unit/AccrualOverflow.t.sol#L66)                 | At 1000% APR per second — far above anything the reference curve produces — the headroom against the overflow threshold is over 50 orders of magnitude. |
+| [`test_accrue_realisticRatesAreFarFromTheBound`](../../test/unit/AccrualOverflow.t.sol#L66)                 | At 1000% APR per second (far above anything the reference curve produces), the headroom against the overflow threshold is over 50 orders of magnitude. |
 
 This is the one documented reachable revert in the liveness guarantee: `accrue()` does not revert for any reachable state, and its residual out-of-domain case is this product, not the rate lookup.

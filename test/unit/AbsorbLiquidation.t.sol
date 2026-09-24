@@ -272,7 +272,7 @@ contract AbsorbLiquidationTest is Test {
     function test_buyCollateral_revertsWhenReservesAtTarget() public {
         // No absorb, no inventory needed: reserves start at the target-covered supply level.
         // Bob supplied 500,000; reserves == 0 (cash 500k = supply 500k). targetReserves is 1,000,000,
-        // so reserves < target and the not-for-sale guard should NOT fire here — instead we raise
+        // so reserves < target and the not-for-sale guard should NOT fire here; instead we raise
         // reserves above target by donating base, then expect NotForSale.
         base.mint(address(market), 1_500_000e6);
         assertGe(market.getReserves(), int256(uint256(1_000_000e6)), "reserves above target");

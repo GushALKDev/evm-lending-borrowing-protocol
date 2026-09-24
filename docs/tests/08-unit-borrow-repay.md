@@ -86,7 +86,7 @@ The guard is enforced against the **resulting debt**, not the borrowed amount. T
 | [`test_repay_maxSentinelClearsAccruedInterest`](../../test/unit/BorrowRepay.t.sol#L481) | The sentinel clears the debt *as accrued*, not as opened |
 | [`test_repay_worksWithoutAnyPrice`](../../test/unit/BorrowRepay.t.sol#L500) | Repayment needs no oracle at all |
 
-The last one is a liveness property worth stating plainly: repaying can only improve health, so it must never consult a price. The test wipes both feeds — making every `getPrice` call revert — and repays anyway. A borrower must be able to exit a position during exactly the oracle outage that would otherwise trap them.
+The last one is a liveness property worth stating plainly: repaying can only improve health, so it must never consult a price. The test wipes both feeds (making every `getPrice` call revert) and repays anyway. A borrower must be able to exit a position during exactly the oracle outage that would otherwise trap them.
 
 ---
 
@@ -98,7 +98,7 @@ The last one is a liveness property worth stating plainly: repaying can only imp
 | [`test_accrual_borrowAccruesBeforeTheCapacityCheck`](../../test/unit/BorrowRepay.t.sol#L532) | `withdraw` values the debt *after* accrual when checking capacity |
 | [`test_accrual_repayAccruesBeforeSettling`](../../test/unit/BorrowRepay.t.sol#L558) | `supply` settles the accrued debt, leaving no interest behind |
 
-The borrow test is shaped to fail if the accrual were removed rather than merely to pass with it. It first asserts the *stale* reading would leave room to borrow, then asserts the call reverts `NotCollateralized` — an outcome only the accrued reading can produce. Asserting the post-state alone would pass just as happily against a contract that never accrued.
+The borrow test is shaped to fail if the accrual were removed rather than merely to pass with it. It first asserts the *stale* reading would leave room to borrow, then asserts the call reverts `NotCollateralized`, an outcome only the accrued reading can produce. Asserting the post-state alone would pass just as happily against a contract that never accrued.
 
 ---
 
@@ -158,7 +158,7 @@ Every test in the table fails against at least one of these mutants of `src/`: t
 | :--- | :------ |
 | [`test_reentrancy_hostileOracleCannotBorrowTwice`](../../test/unit/BorrowRepay.t.sol#L940) | A hostile oracle calling back into `withdraw` is refused, leaving no debt and no tokens moved |
 
-This phase put an external call in the middle of a state-changing path: the borrow branch writes the principal, calls the oracle to push prices, and only then transfers tokens. That ordering is deliberate — the health check must see the position the account is actually left holding — but it means a hostile oracle receives control while the principal is already updated and the cash has not yet left. Without the `nonReentrant` guard on `withdraw`, it could borrow a second time against a single capacity check.
+This phase put an external call in the middle of a state-changing path: the borrow branch writes the principal, calls the oracle to push prices, and only then transfers tokens. That ordering is deliberate (the health check must see the position the account is actually left holding), but it means a hostile oracle receives control while the principal is already updated and the cash has not yet left. Without the `nonReentrant` guard on `withdraw`, it could borrow a second time against a single capacity check.
 
 [`ReentrantPriceOracle`](../../test/mocks/ReentrantPriceOracle.sol) is that adversary: it reenters `withdraw` once from `updateAndGetPrice`. The test asserts the whole outer call reverts and the position is untouched, so the guard is demonstrated rather than argued from the modifier list.
 
@@ -177,7 +177,7 @@ This phase put an external call in the middle of a state-changing path: the borr
 | [`testFuzz_crossingRoundTripNeverFavorsTheAccount`](../../test/fuzz/BorrowCapacity.t.sol#L167) | Borrow past a supply balance, repay the same amount: never lands ahead |
 | [`testFuzz_acceptedBorrowNeverLandsInTheDustBand`](../../test/fuzz/BorrowCapacity.t.sol#L196) | **INV-10.** Every accepted borrow leaves a debt of zero or `>= minBorrow` |
 
-The INV-9 property asserts on the calls that **succeed** rather than predicting which ones should. The contract decides what fits; the test only checks it never lies about the result. A test that recomputed capacity itself and asserted acceptance would be asserting its own arithmetic — and would pass even if both it and the contract were wrong in the same direction.
+The INV-9 property asserts on the calls that **succeed** rather than predicting which ones should. The contract decides what fits; the test only checks it never lies about the result. A test that recomputed capacity itself and asserted acceptance would be asserting its own arithmetic, and would pass even if both it and the contract were wrong in the same direction.
 
 The two capacity properties bracket the boundary from opposite sides, which is what keeps them honest together: the first alone is satisfied by a contract that refuses *every* borrow, and the second alone by one that accepts every borrow. Neither is a useful property without the other.
 
@@ -198,5 +198,5 @@ See [Gaps & Roadmap](./07-gaps-and-roadmap.md).
 ## References
 
 - [Testing Index](./README.md)
-- [Guide 2, Section 7](../02-mathematics.md#7-collateralization-and-health) — the capacity formula these tests pin
-- [ROADMAP Phase 4](../ROADMAP.md#phase-4-borrow--repay) — items and the decisions recorded at close
+- [Guide 2, Section 7](../02-mathematics.md#7-collateralization-and-health): the capacity formula these tests pin
+- [ROADMAP Phase 4](../ROADMAP.md#phase-4-borrow--repay): items and the decisions recorded at close

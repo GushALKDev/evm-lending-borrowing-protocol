@@ -5,7 +5,7 @@
 
 ---
 
-> The oracle is the most security-critical dependency: an inflated collateral price mints unbacked capacity, a deflated one triggers unfair absorbs. Every test here is about one property — the oracle returns a validated `(price18, conf18)` or it reverts, never a degraded price and never a silent fallback to Chainlink.
+> The oracle is the most security-critical dependency: an inflated collateral price mints unbacked capacity, a deflated one triggers unfair absorbs. Every test here is about one property: the oracle returns a validated `(price18, conf18)` or it reverts, never a degraded price and never a silent fallback to Chainlink.
 
 ## Reference feed
 
@@ -19,7 +19,7 @@ MAX_STALENESS 60s · MAX_CONFIDENCE_BPS 200 · MAX_DEVIATION_BPS 300 · heartbea
 
 The Pyth surface is the SDK's [`MockPyth`](../../lib/pyth-sdk-solidity/MockPyth.sol) (real `createPriceFeedUpdateData` + fee-charging `updatePriceFeeds`), so the fee/refund path is exercised for real rather than stubbed. The anchor is [`MockChainlinkFeed`](../../test/mocks/MockChainlinkFeed.sol), a settable `AggregatorV3` stand-in.
 
-> **MockPyth gotcha:** the mock only stores a strictly *newer* `publishTime`, so re-pushing at the current timestamp is silently a no-op — the old price stays and the test asserts against stale data. The `_repushFresh` helper advances one second before re-pushing. This bit the suite during development.
+> **MockPyth gotcha:** the mock only stores a strictly *newer* `publishTime`, so re-pushing at the current timestamp is silently a no-op: the old price stays and the test asserts against stale data. The `_repushFresh` helper advances one second before re-pushing. This bit the suite during development.
 
 ---
 
@@ -64,7 +64,7 @@ The oracle reads the stored Pyth price with `getPriceUnsafe` and applies its *ow
 | [`test_getPrice_revertsOnDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L167) | Anchor `$2100` vs Pyth `$2000` = 476 bps > 300 → `PriceDeviationTooHigh` |
 | [`test_getPrice_acceptsWithinDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L176) | Anchor `$2050` = 243 bps is within band, accepted |
 
-Chainlink is **not** a fallback: it only bounds the Pyth price. When it deviates, the read reverts — the protocol never substitutes the anchor for the primary price.
+Chainlink is **not** a fallback: it only bounds the Pyth price. When it deviates, the read reverts; the protocol never substitutes the anchor for the primary price.
 
 ---
 
@@ -123,14 +123,14 @@ Each gate fuzz recomputes the threshold independently and asserts accept-or-reve
 
 ## Market integration (5.8)
 
-The real oracle wired into a real market, proving the payable price path end to end against the real fee/refund logic — not just the mock.
+The real oracle wired into a real market, proving the payable price path end to end against the real fee/refund logic, not just the mock.
 
 | Test | Asserts |
 | :--- | :------ |
 | [`test_borrowAgainstRealOracle_succeedsAndRefunds`](../../test/integration/OracleMarketBorrow.t.sol#L114) | A collateralized borrow (10 WETH → 10,000 USDC) pushes both feeds, consumes only `4 wei` of Pyth fee (2 feeds × 2 asset-calls), refunds the surplus, and leaves both the market and the oracle holding no ETH |
 | [`test_borrowRevertsWhenUnderfunded`](../../test/integration/OracleMarketBorrow.t.sol#L136) | A borrow with `msg.value = 0` reverts: it cannot cover even the first per-asset Pyth fee |
 
-> **The `receive()` gap.** The market forwards `address(this).balance` to the oracle once per asset; the real oracle consumes only the fee and refunds the surplus *back to the market* for its next per-asset call. The Phase 4 market had no `receive()`, so the refund reverted `RefundFailed` — a latent bug the mock never surfaced because Phase 4 tests sent no ETH and the mock only refunds when `msg.value > 0`. This integration test is what caught it; the fix is a `receive()` on the market. No other market change was needed: the `IPriceOracle` shape is unchanged, so `_pushPrices` and `_refundExcessValue` were already correct.
+> **The `receive()` gap.** The market forwards `address(this).balance` to the oracle once per asset; the real oracle consumes only the fee and refunds the surplus *back to the market* for its next per-asset call. The Phase 4 market had no `receive()`, so the refund reverted `RefundFailed`, a latent bug the mock never surfaced because Phase 4 tests sent no ETH and the mock only refunds when `msg.value > 0`. This integration test is what caught it; the fix is a `receive()` on the market. No other market change was needed: the `IPriceOracle` shape is unchanged, so `_pushPrices` and `_refundExcessValue` were already correct.
 
 ## Liquidation integration (8.10)
 

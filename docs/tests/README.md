@@ -146,14 +146,14 @@ Every invariant from [Guide 6, Section 2](../06-security.md#2-system-invariants)
 | INV-11    | No debt against an empty pool                     | The stateful [`invariant_INV11_noDebtWithoutSupply`](../../test/invariant/Invariants.t.sol) across sequences, plus [`test_utilization_isZeroWhenSupplyIsZero`](../../test/unit/LendingMarketAccounting.t.sol#L245) for the divide-by-zero guard |
 | INV-12    | Static configuration ordering                     | The [eight constructor tests](./03-unit-supply-withdraw.md#constructor-validation-inv-12) in `SupplyWithdrawTest` and the [six](./04-unit-rate-model.md#constructor-22-inv-12) in `InterestRateModelTest` |
 | INV-13    | Absorb coverage condition                         | Constructor-enforced; the [three coverage tests](./11-protocol-management.md#constructor-revert-matrix-74) in `ProtocolManagementTest` pin it at, below, and above the floor |
-| INV-14    | `supplyRate <= borrowRate`, monotone, continuous  | The stateful [`invariant_INV14_supplyRateAtMostBorrowRate`](../../test/invariant/Invariants.t.sol#L299) at the live utilization, plus [`testFuzz_supplyRateNeverExceedsBorrowRate`](../../test/fuzz/InterestRateModel.t.sol#L60), both [monotonicity fuzz tests](./05-fuzz.md#2-interestratemodeltsol--6-tests), [`testFuzz_continuity_noDownwardStepAcrossTheKink`](../../test/fuzz/InterestRateModel.t.sol#L111) |
+| INV-14    | `supplyRate <= borrowRate`, monotone, continuous  | The stateful [`invariant_INV14_supplyRateAtMostBorrowRate`](../../test/invariant/Invariants.t.sol#L299) at the live utilization, plus [`testFuzz_supplyRateNeverExceedsBorrowRate`](../../test/fuzz/InterestRateModel.t.sol#L60), both [monotonicity fuzz tests](./05-fuzz.md#2-interestratemodeltsol-6-tests), [`testFuzz_continuity_noDownwardStepAcrossTheKink`](../../test/fuzz/InterestRateModel.t.sol#L111) |
 
 ---
 
 ## 📚 References
 
 - [Documentation Index](../README.md)
-- [Guide 2: Mathematics](../02-mathematics.md) — the formulas every rounding test pins
-- [Guide 5: Implementation](../05-implementation.md) — the function contracts under test
-- [Guide 6: Security](../06-security.md) — the invariants this suite executes
-- [ROADMAP](../ROADMAP.md) — phase status
+- [Guide 2: Mathematics](../02-mathematics.md): the formulas every rounding test pins
+- [Guide 5: Implementation](../05-implementation.md): the function contracts under test
+- [Guide 6: Security](../06-security.md): the invariants this suite executes
+- [ROADMAP](../ROADMAP.md): phase status

@@ -36,7 +36,7 @@ One `Handler` contract wraps every mutating function with bounded random inputs,
 
 ### The INV-4 one-wei tolerance
 
-INV-4 is a directional inequality, not an exact equality (Guide 2, Section 6): the residual of borrower interest minus supplier interest accrues to reserves, but `getReserves()` is read as the difference of two independently-rounded present values. At extreme fuzz states that difference can dip by a single wei on a pure accrue without any solvency loss. A separate deterministic test confirmed the dip never accumulates over repeated accruals (reserves grow cleanly in realistic positions), so 1 wei is the exact, justified tolerance — not a papered-over failure.
+INV-4 is a directional inequality, not an exact equality (Guide 2, Section 6): the residual of borrower interest minus supplier interest accrues to reserves, but `getReserves()` is read as the difference of two independently-rounded present values. At extreme fuzz states that difference can dip by a single wei on a pure accrue without any solvency loss. A separate deterministic test confirmed the dip never accumulates over repeated accruals (reserves grow cleanly in realistic positions), so 1 wei is the exact, justified tolerance, not a papered-over failure.
 
 ### Utilization must actually move
 
@@ -139,7 +139,7 @@ A separate probe (temporary invariants asserting that `absorb`, `buyCollateral`,
 
 ### INV-9 is per-action, not global
 
-INV-9 ("no action ends undercollateralized") is not a global state invariant: a `movePrice` down-step can legitimately push an existing position below the health line with no action at fault — that is exactly the absorb-eligible state the liquidation path exists to clear. Asserting `isBorrowCollateralized` over every actor after every step would false-fail on healthy protocol behavior. So the handler latches a violation **only** when a successful health-reducing action (the borrow branch of `withdrawBase`, or `withdrawCollateral`) leaves the *acting* account below the line, and the global `invariant_INV9_noActionLeavesUndercollateralized` asserts that latch never tripped. `fail_on_revert = false` also forces the latch pattern: a bare `require` inside a handler is swallowed as a discarded call, so the check has to survive to a real invariant assertion. Falsified (temporarily latching on any opened borrow makes it fail), which also confirms the borrow branch is reached and the check is not vacuous.
+INV-9 ("no action ends undercollateralized") is not a global state invariant: a `movePrice` down-step can legitimately push an existing position below the health line with no action at fault; that is exactly the absorb-eligible state the liquidation path exists to clear. Asserting `isBorrowCollateralized` over every actor after every step would false-fail on healthy protocol behavior. So the handler latches a violation **only** when a successful health-reducing action (the borrow branch of `withdrawBase`, or `withdrawCollateral`) leaves the *acting* account below the line, and the global `invariant_INV9_noActionLeavesUndercollateralized` asserts that latch never tripped. `fail_on_revert = false` also forces the latch pattern: a bare `require` inside a handler is swallowed as a discarded call, so the check has to survive to a real invariant assertion. Falsified (temporarily latching on any opened borrow makes it fail), which also confirms the borrow branch is reached and the check is not vacuous.
 
 ## Bug found: self-transfer minted balance
 

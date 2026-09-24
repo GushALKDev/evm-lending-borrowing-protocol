@@ -1,7 +1,7 @@
 # 🧮 Unit: Accounting Core
 
 **Section:** [Testing Documentation](./README.md)
-**Suite:** [`test/unit/LendingMarketAccounting.t.sol`](../../test/unit/LendingMarketAccounting.t.sol) — 36 tests
+**Suite:** [`test/unit/LendingMarketAccounting.t.sol`](../../test/unit/LendingMarketAccounting.t.sol) (36 tests)
 **Phase:** 1
 **Prev:** [Strategy](./01-strategy.md) · **Next:** [Unit: Supply & Withdraw](./03-unit-supply-withdraw.md)
 
@@ -29,7 +29,7 @@ Phase 1 accounting core, tested against a mocked rate model so index behavior ca
 | Test                                                                                                    | Asserts                                                                                      |
 | :------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
 | [`test_presentValue_isIdentityAtSeedIndexes`](../../test/unit/LendingMarketAccounting.t.sol#L104)       | At the seed indexes, present value equals principal on both sides.                             |
-| [`test_presentValue_matchesDocumentedWorkedExample`](../../test/unit/LendingMarketAccounting.t.sol#L110) | The [Guide 2, Section 2](../02-mathematics.md#2-index-accounting-principal-and-present-value) worked example reproduced digit for digit: 10,000 supplied becomes principal 9,523,809,523; 15,000 borrowed becomes 13,888,888,889, and reading that debt back owes 15,000,000,001 — one unit more than borrowed, in the protocol's favor. |
+| [`test_presentValue_matchesDocumentedWorkedExample`](../../test/unit/LendingMarketAccounting.t.sol#L110) | The [Guide 2, Section 2](../02-mathematics.md#2-index-accounting-principal-and-present-value) worked example reproduced digit for digit: 10,000 supplied becomes principal 9,523,809,523; 15,000 borrowed becomes 13,888,888,889, and reading that debt back owes 15,000,000,001, one unit more than borrowed, in the protocol's favor. |
 | [`test_presentValueSupply_roundsDown`](../../test/unit/LendingMarketAccounting.t.sol#L125)              | Supply PV floors: principal 1 at index 1.05e15 reads 1, not 2.                                |
 | [`test_presentValueBorrow_roundsUp`](../../test/unit/LendingMarketAccounting.t.sol#L131)                | Debt PV ceils: principal 1 at index 1.05e15 reads 2.                                          |
 | [`test_principalValueSupply_roundsDown`](../../test/unit/LendingMarketAccounting.t.sol#L137)            | Supply principal floors: 1 unit of PV records as principal 0.                                 |
@@ -100,4 +100,4 @@ The same path is fuzzed across arbitrary sign crossings in [`ConversionRoundingT
 | [`test_accrue_borrowIndexCeilsOnDustInterest`](../../test/unit/LendingMarketAccounting.t.sol#L371)    | At 1 wei/second for one second, the supply index floors to no change while the borrow index ceils up by 1: the rounding split at its smallest possible magnitude. |
 | [`test_accrue_compoundsAcrossWindows`](../../test/unit/LendingMarketAccounting.t.sol#L382)            | The second half-year window grows the index by more than the first: accrual compounds rather than accumulating linearly. |
 
-The arithmetic boundaries of `_accrue` are pinned separately in [`AccrualOverflowTest`](./04-unit-rate-model.md#3-accrualoverflowtsol--3-tests).
+The arithmetic boundaries of `_accrue` are pinned separately in [`AccrualOverflowTest`](./04-unit-rate-model.md#3-accrualoverflowtsol-3-tests).

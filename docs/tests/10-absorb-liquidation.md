@@ -5,7 +5,7 @@
 
 ---
 
-> The solvency valve. An account that crosses the liquidation threshold must be closable, in full, in one call, by anyone — and the collateral resale must recapitalize reserves at a bounded discount. Every test here is about one question: does the two-step (absorb, then buyCollateral) leave the protocol whole, with any loss recognized as bad debt the instant it occurs rather than lingering as an unliquidatable dust position?
+> The solvency valve. An account that crosses the liquidation threshold must be closable, in full, in one call, by anyone, and the collateral resale must recapitalize reserves at a bounded discount. Every test here is about one question: does the two-step (absorb, then buyCollateral) leave the protocol whole, with any loss recognized as bad debt the instant it occurs rather than lingering as an unliquidatable dust position?
 
 ## Reference position
 
@@ -42,7 +42,7 @@ The three settlement cases are driven by moving the WETH price after the borrow 
 | Test | Asserts |
 | :--- | :------ |
 | [`test_absorb_surplusCreditsAccountAndSeizesCollateral`](../../test/unit/AbsorbLiquidation.t.sol#L125) | Surplus: debt wiped, all collateral seized, bit cleared, `+1,368` base credited; the user claim leaves `totalsCollateral` (now 0) while `getCollateralReserves` holds the 10 WETH; reserves fall by the credit |
-| [`test_absorb_shortfallRecognizesBadDebtAndZeroesAccount`](../../test/unit/AbsorbLiquidation.t.sol#L149) | Shortfall: account zeroed with no surplus, reserves fall by the *full debt* — the `1,980` gap is recognized bad debt |
+| [`test_absorb_shortfallRecognizesBadDebtAndZeroesAccount`](../../test/unit/AbsorbLiquidation.t.sol#L149) | Shortfall: account zeroed with no surplus, reserves fall by the *full debt*; the `1,980` gap is recognized bad debt |
 | [`test_absorb_exactLeavesAccountAndReservesFlat`](../../test/unit/AbsorbLiquidation.t.sol#L165) | Exact: credit equals debt, account zeroed, reserves fall by exactly the debt |
 | [`test_absorb_emitsDebtAndCollateralEvents`](../../test/unit/AbsorbLiquidation.t.sol#L179) | `AbsorbCollateral` (per asset, mid-price value) and `AbsorbDebt` (with the bad-debt figure) both fire |
 
@@ -73,7 +73,7 @@ Settlement routes through the single accounting path (`_updateBasePrincipal`), s
 
 ## Round-trip reserves (6.8)
 
-[`test_absorbThenSell_neverReducesReservesAtStablePrices`](../../test/unit/AbsorbLiquidation.t.sol#L333) absorbs at 1,760 and sells the full 10 WETH back at the same price, asserting reserves end no lower than before the absorb — the protocol keeps the penalty-minus-discount margin.
+[`test_absorbThenSell_neverReducesReservesAtStablePrices`](../../test/unit/AbsorbLiquidation.t.sol#L333) absorbs at 1,760 and sells the full 10 WETH back at the same price, asserting reserves end no lower than before the absorb: the protocol keeps the penalty-minus-discount margin.
 
 ## Collateral reserves semantics (ADR-7)
 

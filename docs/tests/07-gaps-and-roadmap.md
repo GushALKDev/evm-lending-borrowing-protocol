@@ -27,23 +27,23 @@ These are the lines and branches `forge coverage --report lcov` reports as never
 
 ## What each phase shipped
 
-### Phase 8 — Invariant, fork, static analysis, quote fuzz (in progress)
+### Phase 8: Invariant, fork, static analysis, quote fuzz (in progress)
 
 The invariant suite ([inventory](./12-invariant.md)) drives the market through 100,000 bounded random calls per invariant (1,000 runs of 100 calls) with `fail_on_revert = false`, asserting 17 invariants after every step against the **real** `InterestRateModel`: INV-1 to INV-11 and INV-14, the per-operation reserve table exactly, absorb eligibility in both directions, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist (roadmap 8.11), each new one falsified by a targeted mutant, over liquidity rebalanced so sequences reach the kink and `U > 1`. On its first full run it found a critical self-transfer minting bug. The [fork suite](./13-fork.md) replays a cached Hermes VAA through the real `updatePriceFeeds` fee/refund path and real Chainlink `latestRoundData`, exercising the lifecycle against real USDC and WETH (absorb/buyCollateral are excluded on the fork and stay covered at unit/fuzz/invariant level; see the fork inventory for why). [Static analysis](./14-static-analysis.md) (Slither + Aderyn) is clean, with every false positive triaged. Coverage is above 95% on all four columns for every contract (8.9). The storefront quote now carries per-site directed-rounding fuzz ([`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol), roadmap 8.5), pinning `quoteCollateral` against its exact floored value where the AbsorbLiquidation round trip could survive a flipped direction. The local end-to-end lifecycle (roadmap 8.6) runs supply → borrow → warp → repay → absorb → buyCollateral in one sequence on a production `LendingMarket` against a `MockPriceOracle` ([`FullLifecycleTest`](../../test/integration/FullLifecycle.t.sol)), and [`DeployScriptTest`](../../test/integration/DeployScript.t.sol) rehearses [`Deploy.s.sol`](../../script/Deploy.s.sol) against real deployed dependencies exported into its environment vars, the reproducible form of a deploy rehearsal. [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (roadmap 8.10) closes the one payable path nothing else reached: `absorb` and `buyCollateral` through the real `PythChainlinkOracle` with a real Pyth fee, asserting the exact fee consumed and the refund sweep ([inventory](./09-oracle.md#liquidation-integration-810)).
 
-### Phase 7 — Reserves & protocol management
+### Phase 7: Reserves & protocol management
 
 `withdrawReserves` is now implemented in the production contract (it was a reverting harness stub through Phases 4-6), and the constructor's INV-13 absorb-coverage condition is enforced and pinned at, below, and above the floor. Owner/guardian role separation and the full constructor revert matrix are covered in [`ProtocolManagementTest`](./11-protocol-management.md).
 
-### Phase 6 — Absorb liquidation
+### Phase 6: Absorb liquidation
 
 17 unit and 2 fuzz tests ([inventory](./10-absorb-liquidation.md)) for the two-step liquidation: eligibility at `price + conf`, the surplus/exact/shortfall settlements with explicit bad debt, multi-collateral absorb, the storefront quote, `buyCollateral` gated on the reserve deficit, the `ABSORB`/`BUY` pause flags, and the round-trip reserve bound (proceeds `>= creditBase`, since the shortfall gap to the full debt is the already-recognized bad debt).
 
-### Phase 5 — Oracle
+### Phase 5: Oracle
 
-28 unit, 3 fuzz, and 2 integration tests ([inventory](./09-oracle.md)) for `PythChainlinkOracle`: the four-stage validation pipeline, 1e18 normalization from Pyth expo and Chainlink decimals, the fee/refund path against the SDK's `MockPyth`, the constructor guard matrix, and the market integration. The integration test surfaced a latent Phase 4 bug — the market had no `receive()` for the oracle's per-asset fee refund — now fixed.
+28 unit, 3 fuzz, and 2 integration tests ([inventory](./09-oracle.md)) for `PythChainlinkOracle`: the four-stage validation pipeline, 1e18 normalization from Pyth expo and Chainlink decimals, the fee/refund path against the SDK's `MockPyth`, the constructor guard matrix, and the market integration. The integration test surfaced a latent Phase 4 bug (the market had no `receive()` for the oracle's per-asset fee refund), now fixed.
 
-### Phase 4 — Borrow & repay
+### Phase 4: Borrow & repay
 
 37 unit and 6 fuzz tests ([inventory](./08-unit-borrow-repay.md)), closing INV-9 and INV-10 at the single-account level; the multi-account, adversarially-sequenced form was then closed by the Phase 8 invariant suite.
 

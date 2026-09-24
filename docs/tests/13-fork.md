@@ -6,7 +6,7 @@
 
 ---
 
-> The market run against the **real** external dependencies. A `LendingMarket` is deployed fresh on an Ethereum mainnet fork over real USDC (base) and real WETH (collateral), priced by the real `PythChainlinkOracle` wired to the real Pyth pull oracle and the real Chainlink ETH/USD and USDC/USD aggregators. Everything the unit and integration suites mock — the Pyth read, the Chainlink `latestRoundData`, expo/decimal normalization, the confidence and deviation checks, the tokens themselves — is the genuine article here.
+> The market run against the **real** external dependencies. A `LendingMarket` is deployed fresh on an Ethereum mainnet fork over real USDC (base) and real WETH (collateral), priced by the real `PythChainlinkOracle` wired to the real Pyth pull oracle and the real Chainlink ETH/USD and USDC/USD aggregators. Everything the unit and integration suites mock (the Pyth read, the Chainlink `latestRoundData`, expo/decimal normalization, the confidence and deviation checks, the tokens themselves) is the genuine article here.
 
 ## How prices reach the fork: a cached VAA
 
@@ -18,19 +18,19 @@ The cached VAA carries **both** feeds (USDC/USD and ETH/USD) at one shared `publ
 
 | Test | What it proves |
 | :--- | :------------- |
-| [`test_fork_realOraclePricesBothAssets`](../../test/fork/ForkLifecycle.t.sol) | The real oracle prices USDC (~$1) and WETH (~$1,900s) through the full validation pipeline — real Pyth read, real Chainlink anchor, expo/decimal normalization to 1e18, confidence and deviation checks — without reverting |
+| [`test_fork_realOraclePricesBothAssets`](../../test/fork/ForkLifecycle.t.sol) | The real oracle prices USDC (~$1) and WETH (~$1,900s) through the full validation pipeline (real Pyth read, real Chainlink anchor, expo/decimal normalization to 1e18, confidence and deviation checks) without reverting |
 | [`test_fork_forcedEthDoesNotBlockAContractBorrower`](../../test/fork/ForkLifecycle.t.sol) | With 1 ETH forced into the market by `selfdestruct`, a contract with no `receive` function borrows 5,000 USDC paying exactly twice the real `getUpdateFee`; it spends only that fee and the forced ETH stays in the market. Before the refund fix it reverted `RefundFailed(caller, 1 ether)` |
 | [`test_fork_supplyBorrowAccrueRepay`](../../test/fork/ForkLifecycle.t.sol) | The full accounting lifecycle against real prices: an LP supplies real USDC, a borrower posts real WETH and borrows, 30 days of interest accrues (debt grows), and the debt is repaid to zero. The market ends holding no ETH (the oracle refunded the fee surplus) |
 
 ## What is deliberately out of scope, and why
 
-**absorb and buyCollateral do not run on the fork.** With real, fixed fork prices the only lever to drive an account underwater is interest accrual over time — but warping forward makes the cached VAA stale (its `publishTime` is fixed and cannot be refetched for a future block), and the constructor forbids `borrowCF >= liquidateCF`, so an account cannot be borrowed straight into liquidation either. buyCollateral in turn needs the seized inventory that only an absorb produces. Both paths are covered exhaustively at unit ([Absorb Liquidation](./10-absorb-liquidation.md)), fuzz, and invariant level against controlled prices, where forcing a price move is trivial. The fork test targets the paths where a *real* price is load-bearing: the validation pipeline, borrow capacity, and accrual.
+**absorb and buyCollateral do not run on the fork.** With real, fixed fork prices the only lever to drive an account underwater is interest accrual over time, but warping forward makes the cached VAA stale (its `publishTime` is fixed and cannot be refetched for a future block), and the constructor forbids `borrowCF >= liquidateCF`, so an account cannot be borrowed straight into liquidation either. buyCollateral in turn needs the seized inventory that only an absorb produces. Both paths are covered exhaustively at unit ([Absorb Liquidation](./10-absorb-liquidation.md)), fuzz, and invariant level against controlled prices, where forcing a price move is trivial. The fork test targets the paths where a *real* price is load-bearing: the validation pipeline, borrow capacity, and accrual.
 
 **wBTC was dropped.** Its Pyth feed on the fork is chronically stale (the feed is thinly updated), so its cached price deviates from the live Chainlink BTC/USD anchor by more than the reference 300 bps and the real deviation check rejects it. USDC + WETH is the pair whose real Pyth and Chainlink prices actually agree at the pinned block. This is itself a finding the fork test surfaces: not every listed-looking feed is fresh enough to price against.
 
 ## Running
 
-The suite reads `FORK_RPC_URL` from the environment (an Ethereum mainnet RPC). When it is unset — as in CI — every test returns early as a green no-op, so the fork tests never break a run that lacks an RPC. To run them:
+The suite reads `FORK_RPC_URL` from the environment (an Ethereum mainnet RPC). When it is unset (as in CI), every test returns early as a green no-op, so the fork tests never break a run that lacks an RPC. To run them:
 
 ```bash
 FORK_RPC_URL=<eth-mainnet-rpc> forge test --match-path "test/fork/*"

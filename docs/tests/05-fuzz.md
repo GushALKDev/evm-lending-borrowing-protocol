@@ -11,7 +11,7 @@ Every test here with fuzzed parameters runs 1,000 times under the default profil
 
 ---
 
-## 1. `ConversionRounding.t.sol` — 19 tests
+## 1. `ConversionRounding.t.sol` (19 tests)
 
 Indexes bounded to `[1e15, uint64.max]` (they only grow, and `uint64` at 1e15 caps growth at ~18,446×), principals to the `int104` domain.
 
@@ -63,14 +63,14 @@ Round trips alone are too weak: a flipped `presentValueSupply` partially cancels
 
 ---
 
-## 2. `InterestRateModel.t.sol` — 6 tests
+## 2. `InterestRateModel.t.sol` (6 tests)
 
 | Test                                                                                                        | Asserts                                                                                |
 | :-------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
 | [`testFuzz_borrowRate_isMonotone`](../../test/fuzz/InterestRateModel.t.sol#L38)                             | The borrow rate never decreases as utilization rises, across the reachable domain and far past it, up to a ceiling below the `fullMulDiv` overflow. |
 | [`testFuzz_supplyRate_isMonotoneInTheRealDomain`](../../test/fuzz/InterestRateModel.t.sol#L48)              | The supply rate is monotone over `[0, 1e18]`. Bounded deliberately: past U = 1 the derived `s = r * U` grows super-linearly, so pointwise monotonicity there carries no meaning. |
 | [`testFuzz_supplyRateNeverExceedsBorrowRate`](../../test/fuzz/InterestRateModel.t.sol#L60)                  | INV-14's core inequality, for every utilization in the covered domain.                    |
-| [`testFuzz_interestSplit_reserveShareIsNonNegative`](../../test/fuzz/InterestRateModel.t.sol#L76)           | Normalized to one unit of supply, borrower interest `r * U` is always at least supplier interest `s`: the reserve cut can never be negative. Asserted as a directional inequality, never an equality — the two rates floor independently, so no integer identity exists ([Guide 2, Section 6](../02-mathematics.md#6-interest-split-and-reserve-growth)). |
+| [`testFuzz_interestSplit_reserveShareIsNonNegative`](../../test/fuzz/InterestRateModel.t.sol#L76)           | Normalized to one unit of supply, borrower interest `r * U` is always at least supplier interest `s`: the reserve cut can never be negative. Asserted as a directional inequality, never an equality: the two rates floor independently, so no integer identity exists ([Guide 2, Section 6](../02-mathematics.md#6-interest-split-and-reserve-growth)). |
 | [`testFuzz_interestSplit_supplyRateIsFloored`](../../test/fuzz/InterestRateModel.t.sol#L92)                 | Flooring never rounds the supply rate above the real-valued `r * U * (1 - RF)`.            |
 | [`testFuzz_continuity_noDownwardStepAcrossTheKink`](../../test/fuzz/InterestRateModel.t.sol#L111)           | Sweeping deltas around the kink, the curve never steps downward anywhere.                  |
 
@@ -78,18 +78,18 @@ Round trips alone are too weak: a flipped `presentValueSupply` partially cancels
 
 ## 3. `IndexPrecision.t.sol` (4 tests: 2 fuzzed, 2 deterministic)
 
-The executable justification for the `1e15` index scale over a RAY (1e27) alternative ([Guide 5, Section 2](../05-implementation.md#2-core-data-structures)). This is the one suite where magnitude, not direction, is part of the claim — because the claim *is* about how much precision the coarse scale gives up.
+The executable justification for the `1e15` index scale over a RAY (1e27) alternative ([Guide 5, Section 2](../05-implementation.md#2-core-data-structures)). This is the one suite where magnitude, not direction, is part of the claim, because the claim *is* about how much precision the coarse scale gives up.
 
 | Test                                                                                                        | Asserts                                                                                |
 | :-------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
 | [`testFuzz_indexScale_neverFavorsTheSupplier`](../../test/fuzz/IndexPrecision.t.sol#L66)                    | Against the same accrual carried at RAY precision and floored identically at each step, the coarse scale never over-credits (the load-bearing half), and the gap is bounded by a single base unit, 1e-6 USDC (the magnitude half). |
 | [`testFuzz_indexScale_relativeErrorShrinksWithSize`](../../test/fuzz/IndexPrecision.t.sol#L98)              | The absolute gap stays at one base unit regardless of position size, so the relative gap falls below one part per billion for any position at or above `minBorrow`. |
 | [`test_indexScale_assumesSixDecimalBase`](../../test/fuzz/IndexPrecision.t.sol#L124)                        | Pins the analysis to a 6-decimal base: the conclusion is coupled to that assumption and does not transfer to an 18-decimal base market unexamined. |
-| [`test_indexScale_reportErrorAcrossPositionSizes`](../../test/fuzz/IndexPrecision.t.sol#L134)               | A reporting test that logs the measured gap across position sizes; the console output is the deliverable. The two indexes agree digit for digit — the RAY trailing zeros are padding, not signal. |
+| [`test_indexScale_reportErrorAcrossPositionSizes`](../../test/fuzz/IndexPrecision.t.sol#L134)               | A reporting test that logs the measured gap across position sizes; the console output is the deliverable. The two indexes agree digit for digit: the RAY trailing zeros are padding, not signal. |
 
 ---
 
-## 4. `QuoteRounding.t.sol` — 3 tests
+## 4. `QuoteRounding.t.sol` (3 tests)
 
 The storefront quote (`quoteCollateral`) is the third rounding surface after conversion and rate math (Roadmap 8.5). Every division floors, so the buyer never receives more collateral than the ask supports ([Guide 2, Section 9](../02-mathematics.md)). Round-trip coverage in [`AbsorbLiquidation.t.sol`](../../test/fuzz/AbsorbLiquidation.t.sol) can survive a flipped floor → ceil; these pin the quote against a locally computed exact value instead. The storefront and liquidation factors are fuzzed field by field (within the constructor's INV-13 coverage bound) so the discount and askPrice divisions land on non-exact quotients where the direction is observable.
 

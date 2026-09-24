@@ -29,7 +29,7 @@ Slither reads `slither.config.json` (path filters + the intentional-detector exc
 
 ### Reentrancy (Slither `reentrancy-eth`/`-no-eth`/`-events`, Aderyn H-2)
 
-Flagged on `absorb`, `_withdrawBase`, `_withdrawCollateral` (and, for Aderyn, the constructor). The "external call" is `ORACLE.updateAndGetPrice` / `getPrice` — the **immutable** oracle the protocol deploys, not an attacker-controlled address — and every external entry point carries `nonReentrant`. The flagged state writes and events after the call therefore cannot be re-entered. Suppressed inline at each site with a justification comment (`slither-disable-next-line`), keeping the detectors globally active so a genuinely unguarded new site would still surface. Aderyn's constructor instance is a non-issue by definition: no reentrancy is possible before the contract exists, and the flagged "external calls" are `decimals()` / `MAX_CONFIDENCE_BPS()` reads.
+Flagged on `absorb`, `_withdrawBase`, `_withdrawCollateral` (and, for Aderyn, the constructor). The "external call" is `ORACLE.updateAndGetPrice` / `getPrice` (the **immutable** oracle the protocol deploys, not an attacker-controlled address), and every external entry point carries `nonReentrant`. The flagged state writes and events after the call therefore cannot be re-entered. Suppressed inline at each site with a justification comment (`slither-disable-next-line`), keeping the detectors globally active so a genuinely unguarded new site would still surface. Aderyn's constructor instance is a non-issue by definition: no reentrancy is possible before the contract exists, and the flagged "external calls" are `decimals()` / `MAX_CONFIDENCE_BPS()` reads.
 
 ### ETH sent to arbitrary user (Slither `arbitrary-send-eth`, Aderyn H-1)
 
