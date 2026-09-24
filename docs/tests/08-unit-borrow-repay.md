@@ -1,6 +1,6 @@
 # Unit: Borrow & Repay (Phase 4)
 
-**Suites:** [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol) (38 unit) · [`BorrowCapacityFuzzTest`](../../test/fuzz/BorrowCapacity.t.sol) (6 fuzz)
+**Suites:** [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol) (48 unit) · [`BorrowCapacityFuzzTest`](../../test/fuzz/BorrowCapacity.t.sol) (6 fuzz)
 **Covers:** roadmap items 4.1 to 4.7 · invariants INV-9, INV-10
 
 ---

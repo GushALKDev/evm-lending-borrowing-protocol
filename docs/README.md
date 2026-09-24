@@ -76,7 +76,7 @@
     - Test-by-test inventory, every entry linked to its code
     - Invariant coverage map: which test asserts each of INV-1 to INV-14
     - Mutation checks, including the flipped rounding a round trip failed to catch
-    - Current status (277 tests, coverage) and the gaps each remaining phase closes
+    - Current status (307 tests, coverage) and the gaps each remaining phase closes
 
 ---
 
@@ -148,7 +148,7 @@ docs/
 
 See [ROADMAP.md](./ROADMAP.md) for detailed implementation progress across 10 phases: 72 PoC items plus 6 post-PoC Future Work items.
 
-**Current Status:** Phase 8 (Invariant & Fuzz Testing + Audit Prep) in progress · 70 of 72 PoC items (97%), only the audit checklist and its remediation left · 277 tests green, [inventory here](./tests/README.md)
+**Current Status:** Phase 8 (Invariant & Fuzz Testing + Audit Prep) in progress · 70 of 72 PoC items (97%), only the audit checklist and its remediation left · 307 tests green, [inventory here](./tests/README.md)
 
 ---
 

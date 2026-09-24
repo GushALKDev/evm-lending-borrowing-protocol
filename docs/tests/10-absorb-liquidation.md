@@ -1,6 +1,6 @@
 # Absorb Liquidation (Phase 6)
 
-**Suites:** [`AbsorbLiquidationTest`](../../test/unit/AbsorbLiquidation.t.sol) (20 unit) · [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) (2 fuzz)
+**Suites:** [`AbsorbLiquidationTest`](../../test/unit/AbsorbLiquidation.t.sol) (22 unit) · [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) (2 fuzz)
 **Covers:** roadmap items 6.1 to 6.8 · [Guide 2, Sections 7-9](../02-mathematics.md#8-liquidation-math-absorb)
 
 ---

@@ -1,7 +1,7 @@
 # 💸 Unit: Supply & Withdraw
 
 **Section:** [Testing Documentation](./README.md)
-**Suite:** [`test/unit/SupplyWithdraw.t.sol`](../../test/unit/SupplyWithdraw.t.sol) — 36 tests
+**Suite:** [`test/unit/SupplyWithdraw.t.sol`](../../test/unit/SupplyWithdraw.t.sol) — 48 tests
 **Phase:** 3
 **Prev:** [Unit: Accounting](./02-unit-accounting.md) · **Next:** [Unit: Interest Rate Model](./04-unit-rate-model.md)
 

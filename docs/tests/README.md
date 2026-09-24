@@ -33,19 +33,19 @@
 
 ## 📊 Current Status
 
-**277 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, and a revert-reason allowlist, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
+**307 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, fork tests against real Ethereum mainnet dependencies, static analysis clean, coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
 | [`LendingMarketAccountingTest`](../../test/unit/LendingMarketAccounting.t.sol) | Unit  |    36 | 1     |
-| [`SupplyWithdrawTest`](../../test/unit/SupplyWithdraw.t.sol)          | Unit  |    45 | 3     |
-| [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol)                | Unit  |    38 | 4     |
+| [`SupplyWithdrawTest`](../../test/unit/SupplyWithdraw.t.sol)          | Unit  |    48 | 3     |
+| [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol)                | Unit  |    48 | 4     |
 | [`InterestRateModelTest`](../../test/unit/InterestRateModel.t.sol)    | Unit  |    18 | 2     |
 | [`MarketAccrualWithRealCurveTest`](../../test/unit/MarketAccrualWithRealCurve.t.sol) | Unit |  4 | 2     |
 | [`AccrualOverflowTest`](../../test/unit/AccrualOverflow.t.sol)        | Unit  |     3 | 1     |
 | [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol)| Unit  |    28 | 5     |
 | [`AbsorbLiquidationTest`](../../test/unit/AbsorbLiquidation.t.sol)    | Unit  |    22 | 6     |
-| [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol)  | Unit  |    15 | 7     |
+| [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol)  | Unit  |    16 | 7     |
 | [`ConversionRoundingTest`](../../test/fuzz/ConversionRounding.t.sol)  | Fuzz  |    19 | 1     |
 | [`InterestRateModelFuzzTest`](../../test/fuzz/InterestRateModel.t.sol)| Fuzz  |     6 | 2     |
 | [`BorrowCapacityFuzzTest`](../../test/fuzz/BorrowCapacity.t.sol)      | Fuzz  |     6 | 4     |
@@ -55,18 +55,19 @@
 | [`QuoteRoundingTest`](../../test/fuzz/QuoteRounding.t.sol)            | Fuzz  |     3 | 8     |
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
 | [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) | Integration | 4 | 8 |
+| [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) | Integration | 15 | 8 |
 | [`FullLifecycleTest`](../../test/integration/FullLifecycle.t.sol)     | Integration | 1 | 8 |
 | [`DeployScriptTest`](../../test/integration/DeployScript.t.sol)       | Integration | 1 | 8 |
-| [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 15 | 8 |
+| [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 16 | 8 |
 | [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 2 | 8 |
-| **Total**                                                            |       | **277** |     |
+| **Total**                                                            |       | **307** |     |
 
 ### Coverage
 
 | File                        | Lines            | Statements       | Branches       | Functions       |
 | :-------------------------- | :--------------- | :--------------- | :------------- | :-------------- |
 | `src/InterestRateModel.sol` | 100.00% (17/17)  | 100.00% (25/25)  | 100.00% (4/4)  | 100.00% (3/3)   |
-| `src/LendingMarket.sol`     | 99.71% (343/344) | 99.56% (455/457) | 97.14% (68/70) | 100.00% (58/58) |
+| `src/LendingMarket.sol`     | 99.72% (354/355) | 99.58% (472/474) | 97.30% (72/74) | 100.00% (61/61) |
 | `src/PythChainlinkOracle.sol` | 98.46% (64/65) | 96.91% (94/97)   | 95.45% (21/22) | 100.00% (8/8)   |
 
 Every contract is now above the 95% gate on lines, statements, branches, and functions (roadmap 8.9). Phase 8 raised branch coverage on `LendingMarket.sol` from 81.5% to 97.1% by pinning the previously untested revert sides of the input guards (constructor `numAssets`/`collateralAsset`/`liquidateCF`, `ZeroAmount` on every entry point, `InvalidRecipient` on transfer and buyCollateral, and the `RefundFailed` sweep via a rejecting-receiver caller). The few remaining uncovered branches are defensive or physically hard to reach: the fallthrough `revert UnknownAsset` in `_offsetOf` (every caller passes `_requireListed` first, so it is unreachable), the `InsufficientCash` bound in `withdrawReserves` (reachable only when bad debt pushes reserves above cash), and the positive-`targetExpo` scale-up branch of `_scalePyth` (unreachable with realistic Pyth feeds). Details in [Gaps & Roadmap](./07-gaps-and-roadmap.md).
