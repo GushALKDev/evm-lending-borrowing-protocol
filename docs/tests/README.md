@@ -72,7 +72,20 @@
 | Fork (`test/fork`) | 3 |
 | **Total** | **331** |
 
-Under the default profile, 41 tests take fuzzed parameters at 1,000 runs each (41,000 runs), and each of the 17 invariants runs 1,000 sequences of 100 calls (100,000 calls each, 1,700,000 in total). The fork suite runs against the pinned mainnet block when `FORK_RPC_URL` is set and passes as a no-op otherwise; the counts above are the same in both modes.
+The fuzz layer has 43 tests. 41 of them take fuzzed parameters and run 1,000 times each under the default profile; the other 2 (`test_indexScale_assumesSixDecimalBase` and `test_indexScale_reportErrorAcrossPositionSizes` in `IndexPrecision.t.sol`) are deterministic and run once. No test outside `test/fuzz` takes fuzzed parameters.
+
+| Fuzz suite | Tests | Fuzzed (1,000 runs each) | Deterministic (1 run) | Fuzz runs |
+| :--------- | ----: | -----------------------: | --------------------: | --------: |
+| `ConversionRoundingTest` | 19 | 19 | 0 | 19,000 |
+| `InterestRateModelFuzzTest` | 6 | 6 | 0 | 6,000 |
+| `BorrowCapacityFuzzTest` | 6 | 6 | 0 | 6,000 |
+| `IndexPrecisionTest` | 4 | 2 | 2 | 2,000 |
+| `PythChainlinkOracleFuzzTest` | 3 | 3 | 0 | 3,000 |
+| `QuoteRoundingTest` | 3 | 3 | 0 | 3,000 |
+| `AbsorbLiquidationFuzzTest` | 2 | 2 | 0 | 2,000 |
+| **Total** | **43** | **41** | **2** | **41,000** |
+
+Each of the 17 invariants runs 1,000 sequences of 100 calls (100,000 calls each, 1,700,000 in total). The fork suite runs against the pinned mainnet block when `FORK_RPC_URL` is set and passes as a no-op otherwise; the counts above are the same in both modes.
 
 ### Coverage
 
@@ -96,6 +109,9 @@ FORK_RPC_URL= forge test --summary
 # Tests per layer (directory)
 forge test --list --json | jq -r 'to_entries[] | "\(.key | split("/")[1]) \([.value[] | length] | add)"' \
   | awk '{n[$1] += $2} END {for (k in n) print k, n[k]}'
+
+# Fuzzed tests per suite (tests with parameters report "runs: N, μ")
+forge test --match-path "test/fuzz/*" | awk '/^Ran [0-9]+ tests? for / {s = $NF} /runs: [0-9]+, μ/ {n[s]++} END {for (k in n) print k, n[k]}'
 
 # Fuzzed tests and their runs, invariants and their calls
 forge test | awk '/runs: [0-9]+, μ/ {match($0, /runs: [0-9]+/); f++; r += substr($0, RSTART + 6, RLENGTH - 6)}

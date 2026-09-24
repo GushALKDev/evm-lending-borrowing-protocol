@@ -7,7 +7,7 @@
 
 ---
 
-Default profile runs each of these 1,000 times; the `deep` CI profile runs 10,000. This is where the solvency thesis is argued: every assertion pins a rounding *direction*, never a dust magnitude.
+Every test here with fuzzed parameters runs 1,000 times under the default profile and 10,000 under the `deep` profile (run locally before merging; CI uses the default). Across the whole fuzz layer (43 tests in `test/fuzz`, some documented on other pages), 41 take fuzzed parameters; the two `test_` entries in `IndexPrecision.t.sol` are deterministic and run once. This is where the solvency thesis is argued: every assertion pins a rounding *direction*, never a dust magnitude.
 
 ---
 
@@ -76,7 +76,7 @@ Round trips alone are too weak: a flipped `presentValueSupply` partially cancels
 
 ---
 
-## 3. `IndexPrecision.t.sol` — 4 tests
+## 3. `IndexPrecision.t.sol` (4 tests: 2 fuzzed, 2 deterministic)
 
 The executable justification for the `1e15` index scale over a RAY (1e27) alternative ([Guide 5, Section 2](../05-implementation.md#2-core-data-structures)). This is the one suite where magnitude, not direction, is part of the claim — because the claim *is* about how much precision the coarse scale gives up.
 

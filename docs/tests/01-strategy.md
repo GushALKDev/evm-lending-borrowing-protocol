@@ -21,7 +21,7 @@ The suite is layered, and each layer answers a different question.
 
 ## 2. Principles
 
-**Assert directions, not magnitudes.** Rounding tests never assert "the dust is small". They assert which way the division rounds, because a bounded-dust assertion passes just as happily on a flipped rounding direction ([Guide 2, Section 10](../02-mathematics.md#10-rounding-policy)). Magnitude is asserted only where the magnitude itself is the claim, as in the [index-scale analysis](./05-fuzz.md#3-indexprecisiontsol--4-tests).
+**Assert directions, not magnitudes.** Rounding tests never assert "the dust is small". They assert which way the division rounds, because a bounded-dust assertion passes just as happily on a flipped rounding direction ([Guide 2, Section 10](../02-mathematics.md#10-rounding-policy)). Magnitude is asserted only where the magnitude itself is the claim, as in the [index-scale analysis](./05-fuzz.md#3-indexprecisiontsol-4-tests-2-fuzzed-2-deterministic).
 
 **Round trips are necessary but not sufficient.** A flipped `presentValueSupply` partially cancels against `principalValueSupply`'s floor and can survive a round-trip assertion. Every rounding site therefore also has an exact-value fuzz test pinning that single division against a locally computed expectation. This is not hypothetical: see [Mutation Checks](./06-mutation-checks.md).
 
