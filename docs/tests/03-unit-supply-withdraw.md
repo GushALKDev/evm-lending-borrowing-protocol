@@ -38,7 +38,7 @@ The Phase 3 user-facing surface: base and collateral flows, the rebasing ERC20 s
 | :-------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
 | [`test_withdrawBase_returnsTokensAndClearsBalance`](../../test/unit/SupplyWithdraw.t.sol#L150)      | Partial withdrawal debits the balance and returns exactly that many tokens.                     |
 | [`test_withdrawBase_fullWithdrawalZeroesBalance`](../../test/unit/SupplyWithdraw.t.sol#L162)        | A full exit zeroes both the balance and the stored principal: no dust principal left behind.    |
-| [`test_withdrawBase_revertsWhenItWouldBorrow`](../../test/unit/SupplyWithdraw.t.sol#L132)           | Phase 3 forbids crossing below zero: `InsufficientBalance` carries account, balance, and requested amount. Phase 4 replaces this revert with the borrow path. |
+| [`test_withdrawBase_crossingBelowZeroIsRefusedWithoutCollateral`](../../test/unit/SupplyWithdraw.t.sol#L174) | Crossing below zero is a borrow, so it is refused on health: with no collateral posted the call reverts `NotCollateralized(alice, 500e18, 0)`. Phase 3 reverted `InsufficientBalance` here; Phase 4 replaced it with the borrow path. |
 | [`test_withdrawBase_revertsWhenCashInsufficient`](../../test/unit/SupplyWithdraw.t.sol#L189)        | With supply on the books but cash drained out from under the market (simulating ~100% utilization), the withdrawal reverts `InsufficientCash` rather than misaccounting. This is the S4 bank-run mechanic ([Guide 6, Section 4](../06-security.md#4-adversarial-scenarios)). |
 
 ---

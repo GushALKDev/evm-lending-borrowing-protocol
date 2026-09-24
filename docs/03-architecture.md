@@ -291,6 +291,8 @@ Every price runs the same pipeline, in this order, on both read paths; failure a
 
 On the transactional path, `updateAndGetPrice` first requires `msg.value` to cover the Pyth fee (`InsufficientFee`). Reverts raised by the external contracts themselves bubble up unchanged: an update the Pyth contract rejects, a Pyth feed that was never published, or a reverting `latestRoundData`. Checks 2 to 4 read the stored Pyth price, so a fresher signed update can clear them, but only as far as Pyth is publishing a sound price: staleness clears with any fresh update, a wide band only once the published band narrows. Checks 5 to 7 read Chainlink, which no caller can update, and check 8 needs both sources to agree; these persist until the sources themselves change.
 
+**Checks deliberately not applied to the Chainlink anchor.** `answeredInRound` is not compared with `roundId`: Chainlink marks it deprecated in `latestRoundData`, since answers are no longer computed across rounds, and the per-feed heartbeat check already rejects an answer that stopped updating. A future `updatedAt` is not rejected either. It cannot cause a revert or an underflow, because the check adds the heartbeat to `updatedAt` rather than subtracting it from `block.timestamp`; at worst it would make the anchor look fresh for longer, and the anchor's answer is never used as a price, only as the bound Pyth's price must sit within (check 8), so a mislabeled timestamp cannot move any valuation.
+
 ### Suggested Parameters
 
 | Parameter            | Value              | Rationale                                                                                     |
