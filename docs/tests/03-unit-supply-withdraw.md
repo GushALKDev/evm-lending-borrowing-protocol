@@ -96,7 +96,7 @@ The health-check hook on this path is a `NotImplementedYet` stub, unreachable in
 | :-------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
 | [`test_supplyBase_maxSentinelRevertsWithoutDebt`](../../test/unit/SupplyWithdraw.t.sol#L426)        | The `type(uint256).max` full-repay sentinel has nothing to repay when no debt exists, so it reverts `ZeroAmount` rather than pulling an unbounded transfer. |
 | [`test_metadata_matchesLmUSDC`](../../test/unit/SupplyWithdraw.t.sol#L436)                          | `name`, `symbol`, and `decimals` (mirroring the base token) are as specified.                   |
-| [`test_withdraw_refundsExcessValue`](../../test/unit/SupplyWithdraw.t.sol#L595)                     | `withdraw` is payable for oracle-update fees; any `msg.value` it does not spend is swept back, so the caller's ETH balance is unchanged when no update is needed. |
+| [`test_withdraw_refundsExcessValue`](../../test/unit/SupplyWithdraw.t.sol#L595)                     | `withdraw` is payable for oracle-update fees; any `msg.value` it does not spend is refunded, so the caller's ETH balance is unchanged when no update is needed. |
 
 ---
 

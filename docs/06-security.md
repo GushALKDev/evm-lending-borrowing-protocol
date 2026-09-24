@@ -169,6 +169,7 @@ INV-14: getSupplyRate(U) <= getBorrowRate(U) for all U in [0, 1e18];
 | 16 | Guardian key compromise            | Can pause (including absorb) but cannot unpause, steal, or reconfigure, and the owner can always clear what it set; worst case converts to Scenario S2-style delayed absorption. **Residual:** `GUARDIAN` is immutable and cannot be rotated, so a compromised key can re-pause after every owner clear and a lost key leaves the market with no fast pauser. The only remedy is migrating to a redeployment with a new guardian | Bounded, residual accepted |
 | 17 | USDC blacklist of the market       | None possible on-chain; accepted platform risk, disclosed in the threat model               | Accepted            |
 | 18 | Pyth fee griefing (underpaid updates) | `InsufficientFee` revert + surplus refund path; caller funds their own update           | Structural          |
+| 19 | Forced ETH blocking contract callers (a `selfdestruct` into the market, then a liquidator contract with no `receive` gets `RefundFailed`) | The refund is `msg.value` minus the fees paid in the call, and no call is made when it is zero; forced ETH is never forwarded or refunded and stays in the market with no accounting effect. A caller that overpays and cannot receive its own excess still reverts | Structural |
 
 ---
 
@@ -336,7 +337,7 @@ Two targets, and only two: the oracle integration and the token integration. Eve
 **Oracle (`PythChainlinkOracle` against live Pyth and Chainlink).** This is the highest-value integration test in the project, because the Pyth pull mechanics cannot be faithfully mocked. Against the live Pyth pull contract and live Chainlink feeds on a mainnet fork:
 
 - Real Pyth price update data (Hermes VAAs) accepted by `updatePriceFeeds`, not a mock that skips verification
-- The real `updatePriceFeeds` fee: quoting it, forwarding `msg.value`, and sweeping the surplus refund back to the caller
+- The real `updatePriceFeeds` fee: quoting it, forwarding `msg.value`, and refunding the surplus to the caller, including a contract borrower that cannot receive ETH, pays the exact fee, and borrows while ETH has been forced into the market
 - Pyth expo handling and decimal normalization to 18 decimals against real published expos
 - Real Chainlink `latestRoundData` with its actual heartbeat and round metadata
 - Staleness, confidence, and deviation checks evaluated against real values rather than hand-set ones

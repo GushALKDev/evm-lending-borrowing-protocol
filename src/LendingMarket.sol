@@ -544,13 +544,14 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         nonReentrant
         notPaused(PAUSE_WITHDRAW)
     {
+        uint256 priorBalance = address(this).balance - msg.value;
         _accrue();
         if (asset == BASE_TOKEN) {
-            _withdrawBase(msg.sender, amount, priceUpdate);
+            _withdrawBase(msg.sender, amount, priceUpdate, priorBalance);
         } else {
-            _withdrawCollateral(msg.sender, asset, amount, priceUpdate);
+            _withdrawCollateral(msg.sender, asset, amount, priceUpdate, priorBalance);
         }
-        _refundExcessValue();
+        _refundExcessValue(priorBalance);
     }
 
     /**
@@ -563,7 +564,9 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
     // The health check pushes prices through the immutable oracle; the caller (withdraw) is
     // nonReentrant, so emitting after that push is safe.
     // slither-disable-next-line reentrancy-events
-    function _withdrawBase(address account, uint256 amount, bytes[] calldata priceUpdate) internal {
+    function _withdrawBase(address account, uint256 amount, bytes[] calldata priceUpdate, uint256 priorBalance)
+        internal
+    {
         if (amount == 0) revert ZeroAmount();
 
         int104 oldPrincipal = userBasic[account].principal;
@@ -588,7 +591,7 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
             uint256 borrowPV = _presentValueBorrow(_borrowPart(newPrincipal));
             if (borrowPV < MIN_BORROW) revert MinBorrowNotMet(borrowPV, MIN_BORROW);
 
-            _requireBorrowCollateralized(account, priceUpdate);
+            _requireBorrowCollateralized(account, priceUpdate, priorBalance);
         }
 
         IERC20(BASE_TOKEN).safeTransfer(account, amount);
@@ -607,9 +610,13 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
      */
     // Same as _withdrawBase: the price push is on the immutable oracle and the caller is nonReentrant.
     // slither-disable-next-line reentrancy-events
-    function _withdrawCollateral(address account, address asset, uint256 amount, bytes[] calldata priceUpdate)
-        internal
-    {
+    function _withdrawCollateral(
+        address account,
+        address asset,
+        uint256 amount,
+        bytes[] calldata priceUpdate,
+        uint256 priorBalance
+    ) internal {
         _requireListed(asset);
         if (amount == 0) revert ZeroAmount();
         // Collateral backing a debt stays put while borrowing is paused; debt-free accounts are free.
@@ -626,7 +633,7 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
 
         // Only a borrower can be made unhealthy by removing collateral.
         if (userBasic[account].principal < 0) {
-            _requireBorrowCollateralized(account, priceUpdate);
+            _requireBorrowCollateralized(account, priceUpdate, priorBalance);
         }
 
         IERC20(asset).safeTransfer(account, amount);
@@ -648,10 +655,11 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         nonReentrant
         notPaused(PAUSE_ABSORB)
     {
+        uint256 priorBalance = address(this).balance - msg.value;
         _accrue();
 
         // CHECKS: push every price the position depends on, then require eligibility at those prices.
-        _pushPrices(account, priceUpdate);
+        _pushPrices(account, priceUpdate, priorBalance);
         uint256 debtUSD = _debtUSD(account);
         uint256 liqCapacityUSD = _liquidationCapacity(account);
         if (debtUSD <= liqCapacityUSD) revert NotLiquidatable(account, debtUSD, liqCapacityUSD);
@@ -677,7 +685,7 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
 
         emit AbsorbDebt(msg.sender, account, debtPV, badDebt);
 
-        _refundExcessValue();
+        _refundExcessValue(priorBalance);
     }
 
     /**
@@ -722,6 +730,7 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         address recipient,
         bytes[] calldata priceUpdate
     ) external payable nonReentrant notPaused(PAUSE_BUY) {
+        uint256 priorBalance = address(this).balance - msg.value;
         if (recipient == address(0)) revert InvalidRecipient(recipient);
         if (baseAmount == 0) revert ZeroAmount();
         _requireListed(asset);
@@ -729,7 +738,7 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         _accrue();
 
         // CHECKS: push the base and asset prices, then gate on the reserve deficit and the quote.
-        _pushBuyPrices(asset, priceUpdate);
+        _pushBuyPrices(asset, priceUpdate, priorBalance);
 
         int256 reserves = getReserves();
         if (reserves >= int256(TARGET_RESERVES)) revert NotForSale(reserves, TARGET_RESERVES);
@@ -750,7 +759,7 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
 
         emit BuyCollateral(msg.sender, asset, baseAmount, quote);
 
-        _refundExcessValue();
+        _refundExcessValue(priorBalance);
     }
 
     /// @inheritdoc ILendingMarket
@@ -778,10 +787,11 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
      *      exactly the base (for reserves and the quote's base leg) and the asset being bought.
      * @param asset Collateral asset whose price is needed.
      * @param priceUpdate Signed oracle update payloads.
+     * @param priorBalance Market ETH balance before this call, msg.value excluded.
      */
-    function _pushBuyPrices(address asset, bytes[] calldata priceUpdate) internal {
-        ORACLE.updateAndGetPrice{value: address(this).balance}(BASE_TOKEN, priceUpdate);
-        ORACLE.updateAndGetPrice{value: address(this).balance}(asset, priceUpdate);
+    function _pushBuyPrices(address asset, bytes[] calldata priceUpdate, uint256 priorBalance) internal {
+        ORACLE.updateAndGetPrice{value: _unspentValue(priorBalance)}(BASE_TOKEN, priceUpdate);
+        ORACLE.updateAndGetPrice{value: _unspentValue(priorBalance)}(asset, priceUpdate);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -801,9 +811,12 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
      *      push is not: the only state-changing part is the push itself.
      * @param account Account whose health must hold.
      * @param priceUpdate Signed oracle update payloads for the base and every held collateral.
+     * @param priorBalance Market ETH balance before this call, msg.value excluded.
      */
-    function _requireBorrowCollateralized(address account, bytes[] calldata priceUpdate) internal {
-        _pushPrices(account, priceUpdate);
+    function _requireBorrowCollateralized(address account, bytes[] calldata priceUpdate, uint256 priorBalance)
+        internal
+    {
+        _pushPrices(account, priceUpdate, priorBalance);
 
         uint256 debtUSD = _debtUSD(account);
         uint256 capacityUSD = _borrowCapacity(account);
@@ -812,20 +825,21 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Pushes the caller's price update on chain for the base and every collateral held.
-     * @dev Forwards the remaining ETH balance as the fee budget on each call; the oracle refunds its
-     *      surplus and _refundExcessValue sweeps the rest back to the caller at the end of the
-     *      external function. Return values are discarded: _borrowCapacity re-reads the stored
-     *      prices these calls just wrote.
+     * @dev Forwards the caller's unspent msg.value as the fee budget on each call, never ETH the
+     *      market held before the call; the oracle keeps the Pyth fee and refunds the rest, and
+     *      _refundExcessValue returns what is left at the end of the external function. Return values
+     *      are discarded: _borrowCapacity re-reads the stored prices these calls just wrote.
      * @param account Account whose held assets determine which feeds to update.
      * @param priceUpdate Signed oracle update payloads.
+     * @param priorBalance Market ETH balance before this call, msg.value excluded.
      */
-    function _pushPrices(address account, bytes[] calldata priceUpdate) internal {
-        ORACLE.updateAndGetPrice{value: address(this).balance}(BASE_TOKEN, priceUpdate);
+    function _pushPrices(address account, bytes[] calldata priceUpdate, uint256 priorBalance) internal {
+        ORACLE.updateAndGetPrice{value: _unspentValue(priorBalance)}(BASE_TOKEN, priceUpdate);
 
         uint16 assetsIn = userBasic[account].assetsIn;
         for (uint8 i = 0; i < NUM_ASSETS; i++) {
             if (assetsIn & uint16(1 << i) == 0) continue;
-            ORACLE.updateAndGetPrice{value: address(this).balance}(assetByOffset[i], priceUpdate);
+            ORACLE.updateAndGetPrice{value: _unspentValue(priorBalance)}(assetByOffset[i], priceUpdate);
         }
     }
 
@@ -1079,28 +1093,41 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Accepts ETH so the oracle can refund its per-asset fee surplus back to the market.
-     * @dev _pushPrices forwards the whole balance to the oracle on each per-asset call; the oracle
-     *      consumes only the Pyth fee and refunds the rest here. The market re-forwards that balance
-     *      on the next call and _refundExcessValue sweeps the final remainder to the caller, so the
-     *      market never retains ETH across a transaction.
+     * @dev The market forwards the caller's unspent msg.value to the oracle on each per-asset call;
+     *      the oracle keeps only the Pyth fee and refunds the rest here.
      */
     receive() external payable {}
 
     /**
-     * @notice Sweeps any leftover msg.value back to the caller so the market never holds ETH.
-     * @dev Sweeping the whole balance rather than `msg.value - spent` is deliberate. Any ETH that
-     *      reaches this contract, whether the oracle's refund, a forced selfdestruct, or a pre-deploy
-     *      transfer, is swept to the caller. An exact refund would strand the latter two instead,
-     *      requiring an owner-only rescue function: more governance surface for no user benefit.
+     * @notice The part of this call's msg.value not yet spent on Pyth fees.
+     * @dev The only ETH that leaves the market during a call is the fee the oracle keeps, so the
+     *      balance above priorBalance is exactly msg.value minus the fees paid so far. ETH that reached
+     *      the market before the call (a selfdestruct, a pre-deploy transfer) sits inside priorBalance
+     *      and is never part of it: it is not forwarded, not refunded, and stays in the market, which
+     *      has no function to move it and never reads its ETH balance in accounting. msg.value itself
+     *      is read only in the payable entry points, which compute priorBalance once.
+     * @param priorBalance Market ETH balance before this call, msg.value excluded.
+     * @return Unspent msg.value in wei.
      */
-    function _refundExcessValue() internal {
-        uint256 balance = address(this).balance;
-        if (balance > 0) {
+    function _unspentValue(uint256 priorBalance) internal view returns (uint256) {
+        return address(this).balance - priorBalance;
+    }
+
+    /**
+     * @notice Returns the caller's unspent msg.value: msg.value minus the Pyth fees paid in this call.
+     * @dev No call is made when nothing is left, so a caller that cannot receive ETH and pays the exact
+     *      fee is never blocked. A caller that overpays and cannot receive the excess reverts with
+     *      RefundFailed; that is its own overpayment, not something another account can cause.
+     * @param priorBalance Market ETH balance before this call, msg.value excluded.
+     */
+    function _refundExcessValue(uint256 priorBalance) internal {
+        uint256 refund = _unspentValue(priorBalance);
+        if (refund > 0) {
             // The refund goes to msg.sender by design: it returns the caller's own unspent value. Every
             // caller path is nonReentrant, so this final interaction cannot re-enter.
             // slither-disable-next-line arbitrary-send-eth
-            (bool ok,) = msg.sender.call{value: balance}("");
-            if (!ok) revert RefundFailed(msg.sender, balance);
+            (bool ok,) = msg.sender.call{value: refund}("");
+            if (!ok) revert RefundFailed(msg.sender, refund);
         }
     }
 

@@ -167,7 +167,7 @@ Plus the standard ERC-20 surface (`transfer`, `transferFrom`, `approve`, `allowa
 | :--------------- | :--------------------------------------------------------------------------------------------------- |
 | Preconditions   | `amount > 0`; `PAUSE_WITHDRAW` clear; `PAUSE_BORROW` clear if the call would open or increase debt (base) or if the account is in debt (collateral), else `Paused(PAUSE_BORROW)`; base: resulting debt (if any) satisfies `|borrowPV| >= minBorrow` and `isBorrowCollateralized(msg.sender)` at `price - conf`; collateral: same health check iff account has debt; market cash sufficient |
 | Effects         | Accrues; principal decreases (borrow branch past zero) or collateral ledgers decrease; `assetsIn` bit cleared on zero balance |
-| Postconditions  | `isBorrowCollateralized(msg.sender)` holds; tokens sent last; surplus `msg.value` refunded         |
+| Postconditions  | `isBorrowCollateralized(msg.sender)` holds; tokens sent last; `msg.value` minus the Pyth fees paid is refunded, with no call when that is zero |
 | Oracle          | Transactional (`updateAndGetPrice`) only when the action can reduce health                          |
 
 #### `absorb(account, priceUpdate)`

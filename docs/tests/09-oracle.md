@@ -1,6 +1,6 @@
 # Oracle: Pyth + Chainlink (Phase 5)
 
-**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (28 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration) · [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (4 integration) · [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) (15 integration)
+**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (28 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration) · [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (4 integration) · [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) (15 integration) · [`ForcedEthRefundTest`](../../test/integration/ForcedEthRefund.t.sol) (9 integration)
 **Covers:** roadmap items 5.1 to 5.10, 8.10 · [Guide 3, Section 5](../03-architecture.md#5-oracle-system-pyth--chainlink)
 
 ---
@@ -168,3 +168,21 @@ The unit suite proves each check reverts in the oracle; this suite proves what t
 | [`test_outage_exitPathsStayOpen`](../../test/integration/OracleFailureModes.t.sol#L411) | With every anchor stale and no update at all, a supplier withdraws, a borrower repays in full with the sentinel, and the now debt-free account withdraws its collateral |
 
 > **Mutation check.** Moving `_clearAssetIn` after the health check in `_withdrawCollateral` fails `test_brokenCollateralFeed_debtorCanRepayThenExitTheBrokenAsset` with `StaleAnchor(wbtc, ...)`: the exit through a full withdrawal of the broken asset depends on that ordering.
+
+## Refund with forced ETH
+
+ETH can reach the market outside any call, through a `selfdestruct` or a transfer before deployment. The refund used to sweep the market's whole balance to the caller, so with forced ETH present any caller that cannot receive ETH (most liquidators are contracts) reverted `RefundFailed`, even when paying the exact fee. The refund is now `msg.value` minus the Pyth fees paid in the call, only the caller's unspent value is forwarded to the oracle, and no call is made when nothing is left. Real `PythChainlinkOracle` over `MockPyth` at 1 wei per update; each entry point pushes a two-feed blob twice, so the exact fee is 4 wei.
+
+| Test | Asserts |
+| :--- | :------ |
+| [`test_forcedBySelfdestruct_contractBorrowsWithExactFee`](../../test/integration/ForcedEthRefund.t.sol#L171) | 1 ETH forced in by `selfdestruct`; a contract with no `receive` borrows paying 4 wei; the forced ETH stays in the market |
+| [`test_forcedByDeal_contractBorrowsWithExactFee`](../../test/integration/ForcedEthRefund.t.sol#L177) | The same with the market balance set by `vm.deal` |
+| [`test_forcedBySelfdestruct_contractAbsorbsWithExactFee`](../../test/integration/ForcedEthRefund.t.sol#L183) | The contract absorbs an underwater account paying 4 wei |
+| [`test_forcedByDeal_contractAbsorbsWithExactFee`](../../test/integration/ForcedEthRefund.t.sol#L189) | The same with `vm.deal` |
+| [`test_forcedBySelfdestruct_contractBuysCollateralWithExactFee`](../../test/integration/ForcedEthRefund.t.sol#L195) | After an absorb, ETH is forced in and the contract buys the seized WETH paying 4 wei |
+| [`test_forcedByDeal_contractBuysCollateralWithExactFee`](../../test/integration/ForcedEthRefund.t.sol#L202) | The same with `vm.deal` |
+| [`test_excessIsRefundedExactlyToAnEoa`](../../test/integration/ForcedEthRefund.t.sol#L215) | An EOA sending 0.5 ETH spends exactly 4 wei; the forced ETH is neither refunded nor spent, and reserves move by the absorb credit only |
+| [`test_forcedEthDoesNotPayTheCallersFee`](../../test/integration/ForcedEthRefund.t.sol#L231) | With forced ETH present, an absorb sending no value reverts `InsufficientFee(0, 2)`: forced ETH is not a fee budget |
+| [`test_overpayingContractStillRevertsWithItsOwnExcess`](../../test/integration/ForcedEthRefund.t.sol#L242) | A rejecting contract that overpays reverts `RefundFailed` carrying exactly its own excess (0.5 ETH minus 4 wei), not the forced balance |
+
+Before the fix all nine failed: six with `RefundFailed(caller, 1 ether)`, the EOA test with an underflow (it received the forced ETH), the fee test because the forced ETH paid the fee, and the overpaying test with the forced ETH included in the amount. Three mutants each fail at least one of them: a call made when the refund is zero (all six exact-fee tests and the fork test fail with `RefundFailed(caller, 0)`), the whole balance forwarded to the oracle (the fee test), and the refund taken as the whole balance (eight of the nine and the fork test).

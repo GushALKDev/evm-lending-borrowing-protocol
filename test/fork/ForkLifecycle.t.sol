@@ -8,6 +8,7 @@ import {LendingMarket} from "../../src/LendingMarket.sol";
 import {ILendingMarket} from "../../src/interfaces/ILendingMarket.sol";
 import {PythChainlinkOracle} from "../../src/PythChainlinkOracle.sol";
 import {InterestRateModel} from "../../src/InterestRateModel.sol";
+import {ForceSender, RejectingCaller} from "../mocks/ForcedEth.sol";
 
 interface IERC20 {
     function balanceOf(address) external view returns (uint256);
@@ -188,6 +189,38 @@ contract ForkLifecycleTest is Test {
         market.supply(USDC, owed);
         vm.stopPrank();
         assertEq(market.borrowBalanceOf(alice), 0, "debt not cleared by repay");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    FORCED ETH AND THE REAL PYTH FEE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev ETH forced into the market must not be swept to the caller. A contract with no receive
+    ///      function borrows paying exactly the real Pyth fee for the two pushes (base and WETH).
+    function test_fork_forcedEthDoesNotBlockAContractBorrower() public {
+        if (_skip()) return;
+
+        vm.startPrank(lp);
+        IERC20(USDC).approve(address(market), type(uint256).max);
+        market.supply(USDC, 1_000_000e6);
+        vm.stopPrank();
+
+        vm.deal(address(this), 1 ether);
+        new ForceSender{value: 1 ether}(payable(address(market)));
+
+        RejectingCaller caller = new RejectingCaller();
+        deal(WETH, address(caller), 10e18);
+        vm.deal(address(caller), 1 ether);
+        caller.exec(WETH, 0, abi.encodeCall(IERC20.approve, (address(market), type(uint256).max)));
+        caller.exec(address(market), 0, abi.encodeCall(market.supply, (WETH, 10e18)));
+
+        bytes[] memory update = priceUpdate;
+        uint256 exactFee = 2 * IPyth(PYTH).getUpdateFee(update);
+        caller.exec(address(market), exactFee, abi.encodeCall(market.withdraw, (USDC, 5_000e6, update)));
+
+        assertEq(market.borrowBalanceOf(address(caller)), 5_000e6, "contract borrowed");
+        assertEq(address(caller).balance, 1 ether - exactFee, "only the real fee was spent");
+        assertEq(address(market).balance, 1 ether, "forced ETH stays in the market");
     }
 
     /// @dev The market forwards its whole ETH balance to the oracle per asset and the oracle refunds

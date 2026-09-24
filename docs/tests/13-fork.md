@@ -19,6 +19,7 @@ The cached VAA carries **both** feeds (USDC/USD and ETH/USD) at one shared `publ
 | Test | What it proves |
 | :--- | :------------- |
 | [`test_fork_realOraclePricesBothAssets`](../../test/fork/ForkLifecycle.t.sol) | The real oracle prices USDC (~$1) and WETH (~$1,900s) through the full validation pipeline — real Pyth read, real Chainlink anchor, expo/decimal normalization to 1e18, confidence and deviation checks — without reverting |
+| [`test_fork_forcedEthDoesNotBlockAContractBorrower`](../../test/fork/ForkLifecycle.t.sol) | With 1 ETH forced into the market by `selfdestruct`, a contract with no `receive` function borrows 5,000 USDC paying exactly twice the real `getUpdateFee`; it spends only that fee and the forced ETH stays in the market. Before the refund fix it reverted `RefundFailed(caller, 1 ether)` |
 | [`test_fork_supplyBorrowAccrueRepay`](../../test/fork/ForkLifecycle.t.sol) | The full accounting lifecycle against real prices: an LP supplies real USDC, a borrower posts real WETH and borrows, 30 days of interest accrues (debt grows), and the debt is repaid to zero. The market ends holding no ETH (the oracle refunded the fee surplus) |
 
 ## What is deliberately out of scope, and why

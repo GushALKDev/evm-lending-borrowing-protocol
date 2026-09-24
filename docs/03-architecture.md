@@ -313,7 +313,7 @@ Pyth returns a confidence interval (`conf`) with every price. The protocol uses 
 
 Unlike a perp DEX, a money market has state-changing paths that must work without a user-submitted price (views, `supply`, `accrue`). The split is:
 
-- **Transactional prices:** `withdraw` (when health-reducing), `absorb`, and `buyCollateral` take `bytes[] calldata priceUpdate`, are `payable`, forward `msg.value` to the oracle for the Pyth fee, and sweep the refund back to the caller. The market never holds ETH.
+- **Transactional prices:** `withdraw` (when health-reducing), `absorb`, and `buyCollateral` take `bytes[] calldata priceUpdate`, are `payable`, forward the caller's `msg.value` (and only that, never ETH the market already held) to the oracle for the Pyth fee, and refund `msg.value` minus the fees paid in the call. When that is zero no call is made, so a contract that cannot receive ETH and pays the exact fee is never blocked; a caller that overpays and cannot receive the excess reverts `RefundFailed`, which is its own overpayment.
 - **View prices:** `isBorrowCollateralized`, `isLiquidatable`, and `quoteCollateral` read the last stored Pyth price through the same validation pipeline and revert if stale. Off-chain consumers who need guaranteed freshness push an update first.
 
 ### Oracle Failure Policy (accepted risk)
@@ -523,7 +523,7 @@ The base token is USDC (no transfer hooks) and collateral tokens are WETH/wBTC, 
 
 - **Liquidation incentives are pulled, not pushed:** `absorb` pays the caller nothing; value is collected by whoever calls `buyCollateral` at a discount. No payout transfer to an arbitrary address inside the liquidation path means no griefing via reverting receivers.
 - **Reserves leave only by explicit owner action** (`withdrawReserves`), never as a side effect.
-- **Oracle fee surpluses are refunded** to the caller at the end of the transaction; the market never accumulates ETH.
+- **Oracle fee surpluses are refunded** to the caller at the end of the transaction, computed as `msg.value` minus the fees paid in that call. ETH forced into the market from outside (a `selfdestruct`, a transfer before deployment) is never forwarded or refunded: it stays in the market, which has no function to move it, and has no effect on accounting, since no balance or reserve reads the market's ETH balance.
 
 ### 7.3 Custom Errors with Parameters
 
