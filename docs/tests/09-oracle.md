@@ -1,6 +1,6 @@
 # Oracle: Pyth + Chainlink (Phase 5)
 
-**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (28 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration) · [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (4 integration)
+**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (28 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration) · [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (4 integration) · [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) (15 integration)
 **Covers:** roadmap items 5.1 to 5.10, 8.10 · [Guide 3, Section 5](../03-architecture.md#5-oracle-system-pyth--chainlink)
 
 ---
@@ -144,3 +144,27 @@ The same real oracle behind the two liquidation entry points. Nothing else reach
 | [`test_buyCollateralRevertsWhenUnderfunded`](../../test/integration/OracleMarketLiquidation.t.sol#L203) | `buyCollateral` with `msg.value = 0` reverts `InsufficientFee(0, 2)` |
 
 > **Mutation check.** Removing `_refundExcessValue()` from `absorb` and `buyCollateral` fails three of the four tests (the spent-ETH assertions, and the underfunded buy, which the stranded absorb budget then silently funds).
+
+## Failure modes inside the market
+
+The unit suite proves each check reverts in the oracle; this suite proves what that revert does to the market's own entry points, through the real `PythChainlinkOracle` over `MockPyth` (60 s staleness, 200 bps confidence, 300 bps deviation; 3,600 s heartbeat on the collateral anchors, 86,400 s on USDC). alice holds 10 WETH against 15,000 USDC of debt; carol holds 10 WETH and 1 WBTC against 20,000, so WBTC is the collateral whose broken feed spills over onto the rest of her position. Every expected revert pins the asset and the values in the error.
+
+| Test | Asserts |
+| :--- | :------ |
+| [`test_stalePrice_blocksBorrow`](../../test/integration/OracleFailureModes.t.sol#L187) | 61 s after the last WETH publish, a borrow carrying a base-only update reverts `StalePrice(weth, t0, 60)` |
+| [`test_stalePrice_blocksAbsorbUntilAFreshUpdate`](../../test/integration/OracleFailureModes.t.sol#L200) | An absorbable account cannot be absorbed on a stale stored price; the same call with a fresh update succeeds. The one failure the caller can cure |
+| [`test_stalePrice_blocksBuyCollateral`](../../test/integration/OracleFailureModes.t.sol#L218) | `buyCollateral` reverts `StalePrice` on the asset being bought |
+| [`test_staleAnchor_blocksBorrow`](../../test/integration/OracleFailureModes.t.sol#L235) | Past the WETH heartbeat a borrow reverts `StaleAnchor(weth, t0, 3600)` even with a fresh Pyth update attached |
+| [`test_staleAnchor_blocksAbsorbDespiteAFreshUpdate`](../../test/integration/OracleFailureModes.t.sol#L246) | A fresh signed update does not cure a stale anchor: the absorb reverts until Chainlink itself updates, then succeeds |
+| [`test_staleAnchor_blocksBuyCollateral`](../../test/integration/OracleFailureModes.t.sol#L261) | `buyCollateral` reverts `StaleAnchor` on the asset being bought |
+| [`test_confidenceTooWide_blocksBorrow`](../../test/integration/OracleFailureModes.t.sol#L277) | A $50 band on $2,000 (250 bps) reverts the borrow `ConfidenceTooWide(weth, 250, 200)` |
+| [`test_confidenceTooWide_blocksAbsorb`](../../test/integration/OracleFailureModes.t.sol#L291) | A $40 band on the $1,700 crash (235 bps, floored) reverts the absorb |
+| [`test_confidenceTooWide_blocksBuyCollateral`](../../test/integration/OracleFailureModes.t.sol#L305) | The same band reverts `buyCollateral` |
+| [`test_brokenCollateralFeed_blocksBorrowForAnAccountHoldingIt`](../../test/integration/OracleFailureModes.t.sol#L332) | With only the WBTC anchor stale, carol's borrow reverts `StaleAnchor(wbtc, ...)` although her WETH alone would cover it |
+| [`test_brokenCollateralFeed_blocksWithdrawingOtherCollateral`](../../test/integration/OracleFailureModes.t.sol#L342) | Withdrawing WETH, whose feed is healthy, reverts on the WBTC anchor |
+| [`test_brokenCollateralFeed_blocksAbsorbOfTheWholeAccount`](../../test/integration/OracleFailureModes.t.sol#L355) | carol is absorbable on a WETH crash alone, yet the absorb reverts on WBTC until its anchor updates, then seizes both assets: there is no partial absorb |
+| [`test_brokenCollateralFeed_leavesAccountsWithoutItUnaffected`](../../test/integration/OracleFailureModes.t.sol#L375) | alice, who holds no WBTC, borrows normally through the same outage |
+| [`test_brokenCollateralFeed_debtorCanRepayThenExitTheBrokenAsset`](../../test/integration/OracleFailureModes.t.sol#L387) | A partial WBTC withdrawal reverts, but after a repay (no oracle) carol withdraws all of it: zeroing the balance clears the `assetsIn` bit before the health check, so WBTC is no longer priced |
+| [`test_outage_exitPathsStayOpen`](../../test/integration/OracleFailureModes.t.sol#L411) | With every anchor stale and no update at all, a supplier withdraws, a borrower repays in full with the sentinel, and the now debt-free account withdraws its collateral |
+
+> **Mutation check.** Moving `_clearAssetIn` after the health check in `_withdrawCollateral` fails `test_brokenCollateralFeed_debtorCanRepayThenExitTheBrokenAsset` with `StaleAnchor(wbtc, ...)`: the exit through a full withdrawal of the broken asset depends on that ordering.

@@ -194,6 +194,14 @@ Explicit modeling of the states the protocol is designed to survive. Reference p
 
 **Judgment encoded.** Liquidating at unverifiable prices would convert *every* outage into potential wrongful liquidations; refusing converts *severe* outages into bounded reserve losses. The protocol chooses the second, explicitly.
 
+**Known behavior: one collateral's feed breaks.** Every health check and every absorb prices the base and *all* collateral the account holds (`_pushPrices` walks the `assetsIn` bitmap), so a feed failure for one collateral X (stale Pyth price with no fresh update, wide confidence, deviation, or a stale or non-positive Chainlink answer) spills over onto whole positions:
+
+- An account holding X cannot borrow, and while in debt cannot withdraw any collateral, including assets whose own feeds are healthy.
+- An account holding X cannot be absorbed at all, even when it is underwater on its other collateral alone: `absorb` prices and seizes the whole account and has no partial mode. Bad debt can build on such accounts until X's feed recovers.
+- `buyCollateral(X)` is blocked; sales of other assets continue.
+
+Accounts that do not hold X are unaffected. A debtor holding X can still repay (no oracle), and once the rest of the position covers the remaining debt, withdraw X in full: zeroing a balance clears its `assetsIn` bit before the health check, so X is no longer priced. A failure of the base feed blocks every price-consuming action for every account. Pinned by [`OracleFailureModesTest`](./tests/09-oracle.md#failure-modes-inside-the-market).
+
 ### S3: Correlated crash and reserve exhaustion (insolvency modeling)
 
 **Setup.** WETH and wBTC fall 30% together; total absorbed bad debt 180,000 USDC against 100,000 of reserves.
