@@ -19,6 +19,9 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Same version as the local toolchain used for the figures in the docs
+          version: v1.7.1
 
       - name: Check formatting
         run: forge fmt --check
@@ -37,6 +40,9 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Same version as the local toolchain used for the figures in the docs
+          version: v1.7.1
 
       - name: Run tests
         run: forge test -vvv
@@ -68,6 +74,9 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Same version as the local toolchain used for the figures in the docs
+          version: v1.7.1
 
       - name: Run coverage
         run: forge coverage --report lcov --report summary

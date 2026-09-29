@@ -1,4 +1,4 @@
-# 🧮 Guide 2: Protocol Mathematics
+# Guide 2: Protocol Mathematics
 
 **Version:** 1.0
 **Prerequisites:** [Guide 1: Fundamentals](./01-fundamentals.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Notation and Units](#1-notation-and-units)
 2. [Index Accounting (Principal and Present Value)](#2-index-accounting-principal-and-present-value)
@@ -22,7 +22,7 @@
 
 ---
 
-> ⚠️ **Precision rules used throughout:** multiply before dividing; every division states its rounding direction (`floor` or `ceil`); every rounding direction favors the protocol. `floor(x)` is Solidity's default truncating division, `ceil(x) = floor((numerator + denominator - 1) / denominator)`.
+> **Precision rules used throughout:** multiply before dividing; every division states its rounding direction (`floor` or `ceil`); every rounding direction favors the protocol. `floor(x)` is Solidity's default truncating division, `ceil(x) = floor((numerator + denominator - 1) / denominator)`.
 
 ---
 

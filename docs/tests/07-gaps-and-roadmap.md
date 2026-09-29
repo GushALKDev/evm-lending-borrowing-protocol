@@ -1,4 +1,4 @@
-# 🚧 Gaps & Roadmap
+# Gaps & Roadmap
 
 **Section:** [Testing Documentation](./README.md)
 **Prev:** [Mutation Checks](./06-mutation-checks.md)
@@ -56,7 +56,7 @@ This section is updated at the close of every phase:
 
 1. Re-run `forge test --summary` and `forge coverage --no-match-coverage "test|script"`, and update the tables in the [index](./README.md).
 2. Add the new tests to the matching inventory file, with a line-anchored link to the code.
-3. Move any newly covered invariant out of ⏳ in the [invariant coverage map](./README.md#-invariant-coverage-map).
+3. Add any newly covered invariant to the [invariant coverage map](./README.md#invariant-coverage-map).
 4. Record what shipped in the section above and update the open-gaps list.
 
 **On the line anchors:** the links in these files point at line numbers, which drift when a test file is edited. Regenerate them with:

@@ -1,4 +1,4 @@
-# 💸 Unit: Supply & Withdraw
+# Unit: Supply & Withdraw
 
 **Section:** [Testing Documentation](./README.md)
 **Suite:** [`test/unit/SupplyWithdraw.t.sol`](../../test/unit/SupplyWithdraw.t.sol) (48 tests)

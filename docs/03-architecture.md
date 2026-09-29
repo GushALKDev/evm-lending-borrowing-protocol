@@ -1,4 +1,4 @@
-# 🏗️ Guide 3: Technical Architecture and Data Flow
+# Guide 3: Technical Architecture and Data Flow
 
 **Version:** 1.0
 **Prerequisites:** [Guide 2: Protocol Mathematics](./02-mathematics.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Component Diagram](#1-component-diagram)
 2. [Contract Set](#2-contract-set)

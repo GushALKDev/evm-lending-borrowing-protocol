@@ -1,4 +1,4 @@
-# 🧬 Mutation Checks
+# Mutation Checks
 
 **Section:** [Testing Documentation](./README.md)
 **Prev:** [Fuzz](./05-fuzz.md) · **Next:** [Gaps & Roadmap](./07-gaps-and-roadmap.md)

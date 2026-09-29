@@ -1,4 +1,4 @@
-# ⚖️ Guide 4: Trade-offs and Risk Matrix
+# Guide 4: Trade-offs and Risk Matrix
 
 **Version:** 1.0
 **Prerequisites:** [Guide 3: Technical Architecture](./03-architecture.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [How to Read This Document](#1-how-to-read-this-document)
 2. [Risk 1: Oracle Manipulation](#risk-1-oracle-manipulation)

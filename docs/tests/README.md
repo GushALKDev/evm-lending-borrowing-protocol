@@ -1,4 +1,4 @@
-# 🧪 Testing Documentation
+# Testing Documentation
 
 **Version:** 1.0
 **Prerequisites:** [Guide 6: Security](../06-security.md)
@@ -10,7 +10,7 @@
 
 ---
 
-## 📖 Contents
+## Contents
 
 | Document                                       | Covers                                                                     |
 | :--------------------------------------------- | :-------------------------------------------------------------------------- |
@@ -31,7 +31,7 @@
 
 ---
 
-## 📊 Current Status
+## Current Status
 
 **331 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis (Slither: 0 findings; Aderyn: 12 detector categories flagged, all triaged in [Static Analysis](./14-static-analysis.md), 4 false positives and 8 intended design, style, or accepted gas choices, none a vulnerability), coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
 
@@ -129,7 +129,7 @@ awk -F'[:,]' '/^SF:/ {f = $2} /^BRDA:/ && f ~ /^src/ && ($5 == "-" || $5 == "0")
 
 ---
 
-## 🔗 Invariant Coverage Map
+## Invariant Coverage Map
 
 Every invariant from [Guide 6, Section 2](../06-security.md#2-system-invariants), and what currently asserts it.
 
@@ -150,7 +150,7 @@ Every invariant from [Guide 6, Section 2](../06-security.md#2-system-invariants)
 
 ---
 
-## 📚 References
+## References
 
 - [Documentation Index](../README.md)
 - [Guide 2: Mathematics](../02-mathematics.md): the formulas every rounding test pins

@@ -1,4 +1,4 @@
-# 🎯 Testing Strategy
+# Testing Strategy
 
 **Section:** [Testing Documentation](./README.md)
 **Next:** [Unit: Accounting](./02-unit-accounting.md)
@@ -11,11 +11,11 @@ The suite is layered, and each layer answers a different question.
 
 | Layer           | Directory           | Question it answers                                            | Status                  |
 | :-------------- | :------------------ | :------------------------------------------------------------- | :---------------------- |
-| **Unit**        | `test/unit/`        | Does this function do exactly what its contract says?          | ✅ Phases 1-7           |
-| **Fuzz**        | `test/fuzz/`        | Does the property hold for every input in the domain?          | ✅ Phases 1-2, 4-6, 8   |
-| **Invariant**   | `test/invariant/`   | Do the system invariants survive adversarial call sequencing?  | ✅ Phase 8              |
-| **Integration** | `test/integration/` | Does the full lifecycle work end to end on a local deployment? | ✅ Phases 5, 8          |
-| **Fork**        | `test/fork/`        | Do the real external dependencies behave as assumed?           | ✅ Phase 8              |
+| **Unit**        | `test/unit/`        | Does this function do exactly what its contract says?          | Phases 1-7           |
+| **Fuzz**        | `test/fuzz/`        | Does the property hold for every input in the domain?          | Phases 1-2, 4-6, 8   |
+| **Invariant**   | `test/invariant/`   | Do the system invariants survive adversarial call sequencing?  | Phase 8              |
+| **Integration** | `test/integration/` | Does the full lifecycle work end to end on a local deployment? | Phases 5, 8          |
+| **Fork**        | `test/fork/`        | Do the real external dependencies behave as assumed?           | Phase 8              |
 
 ---
 

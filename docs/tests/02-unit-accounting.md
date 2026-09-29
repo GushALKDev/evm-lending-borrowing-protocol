@@ -1,4 +1,4 @@
-# 🧮 Unit: Accounting Core
+# Unit: Accounting Core
 
 **Section:** [Testing Documentation](./README.md)
 **Suite:** [`test/unit/LendingMarketAccounting.t.sol`](../../test/unit/LendingMarketAccounting.t.sol) (36 tests)

@@ -1,11 +1,11 @@
-# 🗺️ ROADMAP: EVM Lending / Borrowing Protocol (PoC)
+# ROADMAP: EVM Lending / Borrowing Protocol (PoC)
 
 **Version:** 1.0
 **Purpose:** Ordered implementation guide and progress tracker
 
 ---
 
-## 📋 How to use this document
+## How to use this document
 
 - **[ ]** = Pending
 - **[~]** = In progress
@@ -16,7 +16,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 ---
 
-## 📊 Progress Summary
+## Progress Summary
 
 | Phase     | Name                                   | Items  | Completed | Progress |
 | :-------- | :------------------------------------- | :----- | :-------- | :------- |
@@ -394,7 +394,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 - [ ] **9.1** Governance and protocol token (timelocked parameter management, replacing the immutable config)
 - [ ] **9.2** Upgradeability path (Comet-style Configurator + proxy behind governance)
 - [ ] **9.3** Rewards distribution (supplier/borrower incentives with tracking indexes)
-- [ ] **9.4** Operator flows (`supplyTo`, `withdrawFrom`, allowance-based managers)
+- [ ] **9.4** Operator flows (`withdrawFrom` and allowance-based managers; `supplyTo` is already implemented)
 - [ ] **9.5** Flash loans on idle base cash
 - [ ] **9.6** Multi-chain deployments and additional markets (WETH-base market)
 
@@ -402,7 +402,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 ---
 
-## 📝 Changelog
+## Changelog
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
@@ -437,7 +437,7 @@ Each phase should be completed before moving to the next. Within each phase, the
 
 ---
 
-## 📚 References
+## References
 
 - [Documentation Index](./README.md)
 - [Fundamental Concepts](./01-fundamentals.md)

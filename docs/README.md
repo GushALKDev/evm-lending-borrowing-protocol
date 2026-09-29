@@ -1,22 +1,22 @@
-# 📚 Complete Guide: EVM Lending / Borrowing Protocol (PoC)
+# Complete Guide: EVM Lending / Borrowing Protocol (PoC)
 
 **Version:** 1.0
 **Status:** Portfolio/Educational Project
 
 ---
 
-## 🎯 Quick Start
+## Quick Start
 
 | Document                    | Description                        | Status      |
 | :-------------------------- | :--------------------------------- | :---------- |
-| **[README](../README.md)**  | Project overview and setup         | ✅ Complete |
-| **[ROADMAP](./ROADMAP.md)** | Implementation phases and progress | ✅ Complete |
-| **[Testing](./tests/README.md)** | Test inventory and invariant coverage | 🔄 Phase 8 |
-| **[LICENSE](../LICENSE)**   | MIT License                        | ✅ Complete |
+| **[README](../README.md)**  | Project overview and setup         | Complete |
+| **[ROADMAP](./ROADMAP.md)** | Implementation phases and progress | Complete |
+| **[Testing](./tests/README.md)** | Test inventory and invariant coverage | Phase 8 |
+| **[LICENSE](../LICENSE)**   | MIT License                        | Complete |
 
 ---
 
-## 📖 Technical Guides
+## Technical Guides
 
 ### Core Concepts (Start Here)
 
@@ -80,7 +80,7 @@
 
 ---
 
-## 🗂️ Documentation Structure
+## Documentation Structure
 
 ```
 docs/
@@ -114,7 +114,7 @@ docs/
 
 ---
 
-## 🎓 Recommended Reading Order
+## Recommended Reading Order
 
 ### For Developers
 
@@ -144,7 +144,7 @@ docs/
 
 ---
 
-## 📊 Progress Tracking
+## Progress Tracking
 
 See [ROADMAP.md](./ROADMAP.md) for detailed implementation progress across 10 phases: 72 PoC items plus 6 post-PoC Future Work items.
 
@@ -152,25 +152,25 @@ See [ROADMAP.md](./ROADMAP.md) for detailed implementation progress across 10 ph
 
 ---
 
-## 🏛️ Attribution
+## Attribution
 
 All smart contract code in this repository is **original and written from scratch**. The architectural design is **inspired by Compound III (Comet)**: the single borrowable base asset, index-based signed-principal accounting, and the absorb/buyCollateral liquidation model follow Comet's design space. Compound is referenced only as inspiration for that design space; **no Compound code is copied or forked**, and several components deliberately diverge from Comet (derived supply rate, immutable deployment, Pyth-based oracle) with the reasoning recorded in the [ADRs](./03-architecture.md#8-architecture-decision-records).
 
 ---
 
-## 📝 Contributing
+## Contributing
 
 This is a portfolio/educational project. While not actively seeking contributions, feedback and suggestions are welcome via issues.
 
 ---
 
-## ⚖️ License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
 
 ---
 
-## 🔗 External Resources
+## External Resources
 
 - **Foundry Documentation:** https://book.getfoundry.sh/
 - **Compound III (Comet) Docs:** https://docs.compound.finance/ (architectural inspiration)

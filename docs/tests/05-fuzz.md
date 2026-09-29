@@ -1,4 +1,4 @@
-# 🎲 Fuzz Tests
+# Fuzz Tests
 
 **Section:** [Testing Documentation](./README.md)
 **Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (6) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (3)

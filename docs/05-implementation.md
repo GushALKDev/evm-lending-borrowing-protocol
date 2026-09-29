@@ -1,4 +1,4 @@
-# 💻 Guide 5: Solidity Implementation
+# Guide 5: Solidity Implementation
 
 **Version:** 1.0
 **Prerequisites:** [Guide 4: Trade-offs and Risk Matrix](./04-tradeoffs.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Tech Stack](#1-tech-stack)
 2. [Core Data Structures](#2-core-data-structures)
@@ -99,7 +99,7 @@ Aave carries its `liquidityIndex` and `variableBorrowIndex` as `uint128` at RAY 
 
 Measured against a RAY reference over a one-year accrual, the `1e15` index reproduces it digit for digit (`1039999999988944` vs `1039999999988944e12`). The residual in present value is **at most one base unit (`1e-6` USDC), always in the protocol-favorable direction**, at any position size. Aave needs RAY because its scaled balances represent 18-decimal tokens, where 12 more orders of resolution do exist below the index; here they do not.
 
-> ⚠️ **This analysis is coupled to the base asset having 6 decimals.** An 18-decimal base (the WETH-base market in [ROADMAP Phase 9.6](./ROADMAP.md#phase-9-future-work-post-poc)) would have 12 more orders of resolution to preserve and would need a wider index scale, and therefore a wider type and a different packing. Revisit this decision before deploying any market whose base is not a 6-decimal asset.
+> **This analysis is coupled to the base asset having 6 decimals.** An 18-decimal base (the WETH-base market in [ROADMAP Phase 9.6](./ROADMAP.md#phase-9-future-work-post-poc)) would have 12 more orders of resolution to preserve and would need a wider index scale, and therefore a wider type and a different packing. Revisit this decision before deploying any market whose base is not a 6-decimal asset.
 
 The claims above are executable, not prose: `test/fuzz/IndexPrecision.t.sol` asserts the direction and the one-base-unit bound against a RAY reference under fuzzing, and pins `BASE_SCALE == 1e6` so a widened base fails the suite loudly.
 
@@ -338,17 +338,17 @@ Roles: **PUBLIC** (anyone), **OWNER** (`Ownable2Step` multisig, transferable in 
 
 | Function             | PUBLIC | OWNER | GUARDIAN | Pause gate        |
 | :-------------------- | :----- | :---- | :------- | :----------------- |
-| `supply` / `supplyTo` | ✅    | -     | -        | `PAUSE_SUPPLY`, except a repay of an indebted `dst` (up to its debt) and a collateral top-up of an indebted `dst` |
-| `withdraw`           | ✅     | -     | -        | `PAUSE_WITHDRAW` (all); `PAUSE_BORROW` (a base withdrawal that opens or increases debt, and a collateral withdrawal while in debt) |
-| `transfer` / `transferFrom` | ✅ | -   | -        | `PAUSE_TRANSFER`  |
-| `absorb`             | ✅     | -     | -        | `PAUSE_ABSORB` (last resort, see [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy)) |
-| `buyCollateral`      | ✅     | -     | -        | `PAUSE_BUY`       |
-| `accrue`             | ✅     | -     | -        | never pausable    |
-| All views            | ✅     | -     | -        | never pausable    |
-| `withdrawReserves`   | ❌     | ✅    | -        | -                 |
-| `setPauseFlags`      | ❌     | ✅ (set/clear) | ✅ (set only) | -        |
-| `transferOwnership` / `acceptOwnership` | ❌ | ✅ (2-step) | - | -            |
-| `renounceOwnership`  | ❌     | ❌ (always reverts `RenounceOwnershipDisabled`) | - | - |
+| `supply` / `supplyTo` | Yes    | -     | -        | `PAUSE_SUPPLY`, except a repay of an indebted `dst` (up to its debt) and a collateral top-up of an indebted `dst` |
+| `withdraw`           | Yes     | -     | -        | `PAUSE_WITHDRAW` (all); `PAUSE_BORROW` (a base withdrawal that opens or increases debt, and a collateral withdrawal while in debt) |
+| `transfer` / `transferFrom` | Yes | -   | -        | `PAUSE_TRANSFER`  |
+| `absorb`             | Yes     | -     | -        | `PAUSE_ABSORB` (last resort, see [Guide 6](./06-security.md#5-pause-and-circuit-breaker-philosophy)) |
+| `buyCollateral`      | Yes     | -     | -        | `PAUSE_BUY`       |
+| `accrue`             | Yes     | -     | -        | never pausable    |
+| All views            | Yes     | -     | -        | never pausable    |
+| `withdrawReserves`   | No     | Yes    | -        | -                 |
+| `setPauseFlags`      | No     | Yes (set/clear) | Yes (set only) | -        |
+| `transferOwnership` / `acceptOwnership` | No | Yes (2-step) | - | -            |
+| `renounceOwnership`  | No     | No (always reverts `RenounceOwnershipDisabled`) | - | - |
 
 ### InterestRateModel.sol / PythChainlinkOracle.sol
 

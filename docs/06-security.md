@@ -1,4 +1,4 @@
-# 🔒 Guide 6: Security
+# Guide 6: Security
 
 **Version:** 1.0
 **Prerequisites:** [Guide 5: Solidity Implementation](./05-implementation.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Threat Model](#1-threat-model)
 2. [System Invariants](#2-system-invariants)
@@ -264,35 +264,35 @@ Scenario playbook. Each row starts from no flags and adds only the flags with a 
 - [ ] Every division site matches the [Guide 2, Section 10](./02-mathematics.md#10-rounding-policy) direction catalogue
 - [ ] `presentValue`/`principalValue` are the only conversion sites (no inline index math anywhere)
 - [ ] `accrue()` is the first effect of every mutating function
-- [ ] `type(uint256).max` repay path leaves exactly zero debt
+- [x] `type(uint256).max` repay path leaves exactly zero debt (`test_repay_maxSentinelRepaysExactlyTheDebt`, `test_repay_maxSentinelClearsAccruedInterest`)
 
 ### Solvency and liquidation
 
 - [x] INV-13 coverage condition enforced in the constructor (reads `MAX_CONFIDENCE_BPS` from the oracle; tested at, below, and above the floor)
-- [ ] Absorb settlement handles surplus, exact, and shortfall cases; bad debt emitted
-- [ ] `buyCollateral` cannot sell user-owned collateral (guard is `quote <= getCollateralReserves = balanceOf(market) - totalsCollateral`, ADR-7)
-- [ ] Storefront discount bounded by the liquidation penalty for every parameter combination
+- [x] Absorb settlement handles surplus, exact, and shortfall cases; bad debt emitted (`test_absorb_surplusCreditsAccountAndSeizesCollateral`, `test_absorb_exactLeavesAccountAndReservesFlat`, `test_absorb_shortfallRecognizesBadDebtAndZeroesAccount`, and `test_absorb_emitsDebtAndCollateralEvents` for the `AbsorbDebt` shortfall)
+- [x] `buyCollateral` cannot sell user-owned collateral (guard is `quote <= getCollateralReserves = balanceOf(market) - totalsCollateral`, ADR-7; `test_buyCollateral_cannotSellUserOwnedCollateral`)
+- [x] Storefront discount bounded by the liquidation penalty for every parameter combination (`quoteCollateral` computes `storeFrontPriceFactor * (1 - liquidationFactor)`, and the constructor rejects a `storeFrontPriceFactor` of 0 or above 1)
 - [x] `withdrawReserves` bounded by both `getReserves()` and cash (onlyOwner, nonReentrant, accrues first)
 
 ### Oracle
 
-- [ ] All four checks execute on both `updateAndGetPrice` and view `getPrice`
-- [ ] Confidence band edge matches context (`- conf` capacity, `+ conf` absorb eligibility)
+- [x] All four checks execute on both `updateAndGetPrice` and view `getPrice` (both return `_validate`, the only place the pipeline lives)
+- [x] Confidence band edge matches context (`- conf` capacity, `+ conf` absorb eligibility; `_borrowCapacity` uses `price - conf`, `_liquidationCapacity` uses `price + conf`; `test_capacity_confidenceBandShrinksCollateralValue`, `test_isLiquidatable_usesHighEdgeOfConfidenceBand`)
 - [ ] Decimal normalization correct for every feed (Pyth expo, Chainlink 8)
-- [ ] Surplus ETH refund cannot be hijacked (refund to `msg.sender` only, after effects)
+- [x] Surplus ETH refund cannot be hijacked (refund to `msg.sender` only, after effects; `_refundExcessValue` is the last call of `withdraw`, `absorb` and `buyCollateral`, and `ForcedEthRefundTest` covers forced ETH)
 
 ### Access control and tokens
 
 - [ ] Matrix in [Guide 5, Section 6](./05-implementation.md#6-access-control-matrix) matches the code exactly
-- [ ] Guardian cannot clear any flag; owner two-step verified
-- [ ] `SafeERC20` on all transfers; no code path assumes transfer return values
-- [ ] ERC-20 `transfer` cannot push sender principal negative
-- [ ] No function accepts `address(0)` where funds could burn
+- [x] Guardian cannot clear any flag; owner two-step verified (`setPauseFlags` requires the guardian's flags to be a superset of the current ones; the market inherits `Ownable2Step` without overriding the handover; `test_pause_guardianCanAddButNotClear`, `test_roles_guardianCanAddBorrowPauseButNotClearIt`)
+- [x] `SafeERC20` on all transfers; no code path assumes transfer return values (all seven token calls in `LendingMarket` are `safeTransfer` or `safeTransferFrom`)
+- [x] ERC-20 `transfer` cannot push sender principal negative (`test_transfer_revertsWhenItWouldPushSenderNegative`)
+- [x] No function accepts `address(0)` where funds could burn (`supplyTo`, `buyCollateral`, `transfer`, `transferFrom` and `withdrawReserves` revert with `InvalidRecipient`; `withdraw` pays `msg.sender`)
 
 ### Meta
 
-- [ ] All Slither/Aderyn findings triaged in writing
-- [ ] Test suite from Section 7 green with coverage >95%
+- [x] All Slither/Aderyn findings triaged in writing ([Static Analysis](./tests/14-static-analysis.md))
+- [x] Test suite from Section 7 green with coverage >95% (331 tests; lines, statements, branches and functions above 95% on every contract, see [Testing Documentation](./tests/README.md#coverage))
 - [ ] Every ADR in [Guide 3](./03-architecture.md#8-architecture-decision-records) still matches the implemented behavior
 
 ---

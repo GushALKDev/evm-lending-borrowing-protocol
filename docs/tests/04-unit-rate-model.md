@@ -1,4 +1,4 @@
-# 📈 Unit: Interest Rate Model & Accrual Bounds
+# Unit: Interest Rate Model & Accrual Bounds
 
 **Section:** [Testing Documentation](./README.md)
 **Suites:** [`InterestRateModel.t.sol`](../../test/unit/InterestRateModel.t.sol) (18) · [`MarketAccrualWithRealCurve.t.sol`](../../test/unit/MarketAccrualWithRealCurve.t.sol) (4) · [`AccrualOverflow.t.sol`](../../test/unit/AccrualOverflow.t.sol) (3)

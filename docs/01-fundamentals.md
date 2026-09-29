@@ -1,4 +1,4 @@
-# 📖 Guide 1: Fundamental Concepts
+# Guide 1: Fundamental Concepts
 
 **Version:** 1.0
 **Prerequisites:** None (start here)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [What Is a Money Market?](#1-what-is-a-money-market)
 2. [Supply and Borrow Mechanics](#2-supply-and-borrow-mechanics)
