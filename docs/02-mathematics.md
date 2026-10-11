@@ -342,7 +342,7 @@ credit >= debt  ⇔  price * LF >= (price + conf) * liquidateCF
               ⇔  LF >= liquidateCF * (1 + conf/price)
 ```
 
-Since the oracle rejects any price with `conf/price > MAX_CONFIDENCE_BPS`, the **parameterization invariant** enforced at construction ([Guide 5](./05-implementation.md#7-pre-deployment-checklist), [Guide 6, INV-13](./06-security.md#2-system-invariants)) is:
+Since the oracle rejects any price with `conf * 10_000 > MAX_CONFIDENCE_BPS * price`, compared by cross-multiplication with no rounding, every accepted price satisfies `conf/price <= MAX_CONFIDENCE_BPS / 10_000` exactly, and the **parameterization invariant** enforced at construction ([Guide 5](./05-implementation.md#7-pre-deployment-checklist), [Guide 6, INV-13](./06-security.md#2-system-invariants)) is:
 
 ```
 liquidationFactor >= liquidateCollateralFactor * (10_000 + MAX_CONFIDENCE_BPS) / 10_000
@@ -433,6 +433,9 @@ Single rule: **when the protocol and an account are on opposite sides of a divis
 | Seize credit at absorb                     | floor            | Absorbed account     |
 | `buyCollateral` discount                   | floor            | Buyer                |
 | `buyCollateral` quote (collateral out)     | floor            | Buyer                |
+| Oracle confidence check (`conf` vs `price`) | compared by cross-multiplication, no rounding | None |
+| Oracle deviation check (`\|pyth - anchor\|` vs `anchor`) | compared by cross-multiplication, no rounding | None |
+| bps reported in `ConfidenceTooWide` / `PriceDeviationTooHigh` | ceil (reporting only) | None |
 
 Consequences worth stating:
 

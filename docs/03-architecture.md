@@ -283,11 +283,13 @@ Every price runs the same pipeline, in this order, on both read paths; failure a
 | 1 | **Known asset**          | the asset has a feed configured                                    | `UnknownAsset`          | No silent default feed                               |
 | 2 | **Pyth non-zero**        | `price > 0`                                                        | `ZeroPrice`             | Sanity check                                         |
 | 3 | **Pyth staleness**       | `publishTime + MAX_STALENESS >= block.timestamp`                   | `StalePrice`            | Old prices misstate borrowing capacity and health    |
-| 4 | **Confidence**           | `conf * 10_000 / price <= MAX_CONFIDENCE_BPS`                      | `ConfidenceTooWide`     | Wide confidence means market stress or illiquidity   |
+| 4 | **Confidence**           | `conf * 10_000 <= MAX_CONFIDENCE_BPS * price`                      | `ConfidenceTooWide`     | Wide confidence means market stress or illiquidity   |
 | 5 | **Chainlink non-zero**   | `answer > 0`                                                       | `ZeroPrice`             | An invalid anchor cannot validate anything           |
 | 6 | **Chainlink staleness**  | `updatedAt + heartbeat >= block.timestamp` (per-feed heartbeat)    | `StaleAnchor`           | A stalled anchor fails closed rather than vouching for Pyth |
 | 7 | **Chainlink decimals**   | `decimals() <= 18`                                                 | `InvalidConfiguration("decimals")` | Normalization to 1e18 must not underflow     |
-| 8 | **Deviation anchor**     | `\|pythPrice - chainlinkPrice\| * 10_000 / chainlinkPrice <= MAX_DEVIATION_BPS` | `PriceDeviationTooHigh` | Catches Pyth anomalies against an independent source |
+| 8 | **Deviation anchor**     | `\|pythPrice - chainlinkPrice\| * 10_000 <= MAX_DEVIATION_BPS * chainlinkPrice` | `PriceDeviationTooHigh` | Catches Pyth anomalies against an independent source |
+
+Checks 4 and 8 compare by cross-multiplication, with no division, so a ratio a fraction of a basis point over its limit is rejected; the bps value carried by the error is rounded up, so it is above the limit whenever the check fires.
 
 On the transactional path, `updateAndGetPrice` first requires `msg.value` to cover the Pyth fee (`InsufficientFee`). Reverts raised by the external contracts themselves bubble up unchanged: an update the Pyth contract rejects, a Pyth feed that was never published, or a reverting `latestRoundData`. Checks 2 to 4 read the stored Pyth price, so a fresher signed update can clear them, but only as far as Pyth is publishing a sound price: staleness clears with any fresh update, a wide band only once the published band narrows. Checks 5 to 7 read Chainlink, which no caller can update, and check 8 needs both sources to agree; these persist until the sources themselves change.
 

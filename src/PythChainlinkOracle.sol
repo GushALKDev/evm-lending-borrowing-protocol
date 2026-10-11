@@ -169,7 +169,7 @@ contract PythChainlinkOracle is IPriceOracle {
         if (!config.set) revert UnknownAsset(asset);
 
         // --- Pyth: primary price ---
-        // The confidence is checked below (confBps against MAX_CONFIDENCE_BPS) after normalization;
+        // The confidence is checked below (conf18 against MAX_CONFIDENCE_BPS) after normalization;
         // the detector flags getPriceUnsafe because the check is not adjacent to this line.
         // slither-disable-next-line pyth-unchecked-confidence
         PythStructs.Price memory pythPrice = PYTH.getPriceUnsafe(config.pythFeedId);
@@ -182,17 +182,26 @@ contract PythChainlinkOracle is IPriceOracle {
         price18 = _scalePyth(uint64(pythPrice.price), pythPrice.expo);
         conf18 = _scalePyth(pythPrice.conf, pythPrice.expo);
 
-        // Confidence relative to price, in basis points.
-        uint256 confBps = (conf18 * BPS_SCALE) / price18;
-        if (confBps > MAX_CONFIDENCE_BPS) revert ConfidenceTooWide(asset, confBps, MAX_CONFIDENCE_BPS);
+        // Confidence relative to price, compared by cross-multiplication: a floored ratio would let a
+        // band a fraction of a basis point above the limit through. The reported bps rounds up, so it
+        // is above the limit whenever this fires. Overflow: Pyth carries an int64 price and a uint64
+        // conf, so for any expo <= +18 both price18 and conf18 are below 2^64 * 1e36 (~1.8e55) and
+        // every product here stays below ~1.9e59, far under 2^256 (~1.2e77). A larger expo reverts on
+        // checked arithmetic, failing closed.
+        if (conf18 * BPS_SCALE > MAX_CONFIDENCE_BPS * price18) {
+            revert ConfidenceTooWide(asset, (conf18 * BPS_SCALE + price18 - 1) / price18, MAX_CONFIDENCE_BPS);
+        }
 
         // --- Chainlink: deviation anchor ---
         uint256 anchor18 = _readAnchor(asset, config);
 
+        // Same exact comparison and rounded-up report. An accepted anchor satisfies
+        // anchor18 * (BPS_SCALE - MAX_DEVIATION_BPS) <= BPS_SCALE * price18, so anchor18 <= 1e4 * price18
+        // and both products stay below 1e63. An anchor large enough to overflow diff * BPS_SCALE
+        // reverts on checked arithmetic, as it did before this check was made exact.
         uint256 diff = price18 > anchor18 ? price18 - anchor18 : anchor18 - price18;
-        uint256 deviationBps = (diff * BPS_SCALE) / anchor18;
-        if (deviationBps > MAX_DEVIATION_BPS) {
-            revert PriceDeviationTooHigh(asset, deviationBps, MAX_DEVIATION_BPS);
+        if (diff * BPS_SCALE > MAX_DEVIATION_BPS * anchor18) {
+            revert PriceDeviationTooHigh(asset, (diff * BPS_SCALE + anchor18 - 1) / anchor18, MAX_DEVIATION_BPS);
         }
     }
 

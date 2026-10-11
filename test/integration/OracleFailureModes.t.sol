@@ -287,7 +287,7 @@ contract OracleFailureModesTest is Test {
         market.withdraw{value: FEE_BUDGET}(address(usdc), 100e6, update);
     }
 
-    /// @dev A $40 band on $1,700 is 235 bps (floored).
+    /// @dev A $40 band on $1,700 is ~235.29 bps, reported rounded up as 236.
     function test_confidenceTooWide_blocksAbsorb() public {
         vm.warp(t0 + 1);
         wethAnchor.setAnswer(CRASH_PRICE, block.timestamp);
@@ -296,7 +296,7 @@ contract OracleFailureModesTest is Test {
         vm.prank(liquidator);
         vm.expectRevert(
             abi.encodeWithSelector(
-                PythChainlinkOracle.ConfidenceTooWide.selector, address(weth), 235, MAX_CONFIDENCE_BPS
+                PythChainlinkOracle.ConfidenceTooWide.selector, address(weth), 236, MAX_CONFIDENCE_BPS
             )
         );
         market.absorb{value: FEE_BUDGET}(alice, update);
@@ -310,7 +310,7 @@ contract OracleFailureModesTest is Test {
         vm.prank(liquidator);
         vm.expectRevert(
             abi.encodeWithSelector(
-                PythChainlinkOracle.ConfidenceTooWide.selector, address(weth), 235, MAX_CONFIDENCE_BPS
+                PythChainlinkOracle.ConfidenceTooWide.selector, address(weth), 236, MAX_CONFIDENCE_BPS
             )
         );
         market.buyCollateral{value: FEE_BUDGET}(address(weth), 0, 1_000e6, liquidator, update);

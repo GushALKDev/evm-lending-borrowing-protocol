@@ -64,44 +64,74 @@ contract PythChainlinkOracleFuzzTest is Test {
         assertEq(conf18, 0, "zero conf stays zero");
     }
 
-    /// @notice The confidence gate admits exactly conf/price ratios up to MAX_CONF_BPS and rejects above.
-    function testFuzz_confidenceGate(uint64 confRaw) public {
-        // price fixed at $2000 (2000e8, expo -8); anchor matches so only confidence can trip.
-        uint64 conf = uint64(bound(confRaw, 0, 200e8)); // up to 1000 bps
-        chainlink.setAnswer(2000e18, block.timestamp);
-        _push(2000e8, conf, -8);
+    /// @notice The confidence gate accepts if and only if conf * 10,000 <= MAX_CONF_BPS * price, compared
+    ///         exactly, and a rejection reports the ratio rounded up.
+    /// @dev Half the runs draw conf from a window of [MAX - 1, MAX + 2] bps of the price, a third of which
+    ///      lies strictly inside (MAX, MAX + 1) bps, where a floored ratio would pass. The other half draw
+    ///      conf from the whole uint64 range. Expo stays in [-18, 0], where normalization is an
+    ///      exact multiplication, so the comparison on the raw mantissas is the comparison the oracle makes.
+    function testFuzz_confidenceGate(uint64 priceRaw, uint64 confRaw, int32 expo, bool nearLimit) public {
+        uint256 price = bound(priceRaw, 1, uint64(type(int64).max));
+        uint256 conf = nearLimit
+            ? bound(confRaw, (price * (MAX_CONF_BPS - 1)) / BPS, (price * (MAX_CONF_BPS + 2)) / BPS)
+            : uint256(confRaw);
+        expo = int32(bound(int256(expo), -18, 0));
 
-        uint256 confBps = (uint256(conf) * BPS) / 2000e8;
-        if (confBps > MAX_CONF_BPS) {
+        uint256 scale = 10 ** uint256(int256(18) + expo);
+        uint256 price18 = price * scale;
+        uint256 conf18 = conf * scale;
+        // 18-decimal anchor at the exact normalized price, so only the confidence can trip.
+        chainlink.setAnswer(int256(price18), block.timestamp);
+        _push(int64(uint64(price)), uint64(conf), expo);
+
+        if (conf * BPS > MAX_CONF_BPS * price) {
+            uint256 reportedBps = (conf18 * BPS + price18 - 1) / price18;
             vm.expectRevert(
-                abi.encodeWithSelector(PythChainlinkOracle.ConfidenceTooWide.selector, WETH, confBps, MAX_CONF_BPS)
+                abi.encodeWithSelector(PythChainlinkOracle.ConfidenceTooWide.selector, WETH, reportedBps, MAX_CONF_BPS)
             );
             oracle.getPrice(WETH);
         } else {
-            (uint256 price18,) = oracle.getPrice(WETH);
-            assertEq(price18, 2000e18, "in-band confidence accepted");
+            (uint256 gotPrice, uint256 gotConf) = oracle.getPrice(WETH);
+            assertEq(gotPrice, price18, "in-band price accepted");
+            assertEq(gotConf, conf18, "in-band conf accepted");
         }
     }
 
-    /// @notice The deviation gate admits exactly |pyth-anchor|/anchor up to MAX_DEV_BPS and rejects above.
-    function testFuzz_deviationGate(uint256 anchorPrice) public {
-        // Pyth fixed at $2000, conf 0; vary the 18-dec anchor around it.
-        uint256 anchor18 = bound(anchorPrice, 1800e18, 2200e18);
+    /// @notice The deviation gate accepts if and only if |pyth - anchor| * 10,000 <= MAX_DEV_BPS * anchor,
+    ///         compared exactly, and a rejection reports the ratio rounded up.
+    /// @dev Half the runs place the anchor so the deviation falls in [MAX - 1, MAX + 2] bps, on either side
+    ///      of the Pyth price, a third of which lies strictly inside (MAX, MAX + 1) bps. The other half draw
+    ///      the anchor from [price / 2, price * 2].
+    function testFuzz_deviationGate(uint64 priceRaw, uint256 anchorRaw, bool pythAbove, bool nearLimit) public {
+        // $1 to $1,000,000 at expo -8, conf 0, so only the deviation can trip.
+        uint256 price18 = bound(priceRaw, 1e8, 1e14) * 1e10;
+        uint256 anchor18;
+        if (!nearLimit) {
+            anchor18 = bound(anchorRaw, price18 / 2, price18 * 2);
+        } else if (pythAbove) {
+            // price = anchor * (1 + d)  =>  anchor = price / (1 + d), d in [MAX - 1, MAX + 2] bps.
+            anchor18 =
+                bound(anchorRaw, (price18 * BPS) / (BPS + MAX_DEV_BPS + 2), (price18 * BPS) / (BPS + MAX_DEV_BPS - 1));
+        } else {
+            // price = anchor * (1 - d)  =>  anchor = price / (1 - d), d in [MAX - 1, MAX + 2] bps.
+            anchor18 =
+                bound(anchorRaw, (price18 * BPS) / (BPS - MAX_DEV_BPS + 1), (price18 * BPS) / (BPS - MAX_DEV_BPS - 2));
+        }
         chainlink.setAnswer(int256(anchor18), block.timestamp);
-        _push(2000e8, 0, -8);
+        _push(int64(uint64(price18 / 1e10)), 0, -8);
 
-        uint256 pyth18 = 2000e18;
-        uint256 diff = pyth18 > anchor18 ? pyth18 - anchor18 : anchor18 - pyth18;
-        uint256 devBps = (diff * BPS) / anchor18;
-
-        if (devBps > MAX_DEV_BPS) {
+        uint256 diff = price18 > anchor18 ? price18 - anchor18 : anchor18 - price18;
+        if (diff * BPS > MAX_DEV_BPS * anchor18) {
+            uint256 reportedBps = (diff * BPS + anchor18 - 1) / anchor18;
             vm.expectRevert(
-                abi.encodeWithSelector(PythChainlinkOracle.PriceDeviationTooHigh.selector, WETH, devBps, MAX_DEV_BPS)
+                abi.encodeWithSelector(
+                    PythChainlinkOracle.PriceDeviationTooHigh.selector, WETH, reportedBps, MAX_DEV_BPS
+                )
             );
             oracle.getPrice(WETH);
         } else {
-            (uint256 price18,) = oracle.getPrice(WETH);
-            assertEq(price18, pyth18, "in-band deviation accepted");
+            (uint256 gotPrice,) = oracle.getPrice(WETH);
+            assertEq(gotPrice, price18, "in-band deviation accepted");
         }
     }
 }

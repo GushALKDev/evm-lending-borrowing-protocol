@@ -160,17 +160,48 @@ contract PythChainlinkOracleTest is Test {
         assertEq(conf18, 40e18, "conf at exact boundary accepted");
     }
 
+    function test_getPrice_revertsOnConfidenceJustAboveLimit() public {
+        // conf $40.10 on $2000 = 200.5 bps: above the limit by half a basis point, so it must revert.
+        // The reported value rounds up to 201, which is above the limit whenever the check fires.
+        _repushFresh(2000e8, 40.1e8);
+        vm.expectRevert(
+            abi.encodeWithSelector(PythChainlinkOracle.ConfidenceTooWide.selector, WETH, uint256(201), MAX_CONF_BPS)
+        );
+        oracle.getPrice(WETH);
+    }
+
     /*//////////////////////////////////////////////////////////////
                              DEVIATION
     //////////////////////////////////////////////////////////////*/
 
     function test_getPrice_revertsOnDeviation() public {
-        // Chainlink at $2100 vs Pyth $2000 = 100/2100 ~= 476 bps > 300.
+        // Chainlink at $2100 vs Pyth $2000 = 100/2100 ~= 476.19 bps > 300, reported rounded up as 477.
         chainlink.setAnswer(2100e8, block.timestamp);
         vm.expectRevert(
-            abi.encodeWithSelector(PythChainlinkOracle.PriceDeviationTooHigh.selector, WETH, uint256(476), MAX_DEV_BPS)
+            abi.encodeWithSelector(PythChainlinkOracle.PriceDeviationTooHigh.selector, WETH, uint256(477), MAX_DEV_BPS)
         );
         oracle.getPrice(WETH);
+    }
+
+    function test_getPrice_revertsOnDeviationJustAboveLimit() public {
+        // Pyth $2060.10 vs Chainlink $2000 = 60.10/2000 = 300.5 bps: above the limit by half a basis
+        // point, so it must revert, reported rounded up as 301.
+        vm.warp(block.timestamp + 1);
+        _pushPyth(2060.1e8, 2e8, block.timestamp);
+        chainlink.setAnswer(2000e8, block.timestamp);
+        vm.expectRevert(
+            abi.encodeWithSelector(PythChainlinkOracle.PriceDeviationTooHigh.selector, WETH, uint256(301), MAX_DEV_BPS)
+        );
+        oracle.getPrice(WETH);
+    }
+
+    function test_getPrice_acceptsDeviationAtBoundary() public {
+        // Pyth $2060 vs Chainlink $2000 = exactly 300 bps, accepted.
+        vm.warp(block.timestamp + 1);
+        _pushPyth(2060e8, 2e8, block.timestamp);
+        chainlink.setAnswer(2000e8, block.timestamp);
+        (uint256 price18,) = oracle.getPrice(WETH);
+        assertEq(price18, 2060e18, "deviation at exact boundary accepted");
     }
 
     function test_getPrice_acceptsWithinDeviation() public {

@@ -140,10 +140,11 @@ contract OracleMarketLiquidationTest is Test {
         uint256 ethBefore = liquidator.balance;
         int256 reservesBefore = market.getReserves();
 
-        // Before the push the stored Pyth price ($2,000) disagrees with the moved anchor by 1,764 bps,
-        // so the view refuses to price at all: only the absorb's own update can make alice eligible.
+        // Before the push the stored Pyth price ($2,000) disagrees with the moved anchor by ~1,764.7 bps
+        // (reported rounded up as 1,765), so the view refuses to price at all: only the absorb's own
+        // update can make alice eligible.
         vm.expectRevert(
-            abi.encodeWithSelector(PythChainlinkOracle.PriceDeviationTooHigh.selector, address(weth), 1_764, 300)
+            abi.encodeWithSelector(PythChainlinkOracle.PriceDeviationTooHigh.selector, address(weth), 1_765, 300)
         );
         market.isLiquidatable(alice);
 

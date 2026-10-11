@@ -1,6 +1,6 @@
 # Oracle: Pyth + Chainlink (Phase 5)
 
-**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (28 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration) · [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (4 integration) · [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) (15 integration) · [`ForcedEthRefundTest`](../../test/integration/ForcedEthRefund.t.sol) (9 integration)
+**Suites:** [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol) (31 unit) · [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) (3 fuzz) · [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) (2 integration) · [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) (4 integration) · [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) (15 integration) · [`ForcedEthRefundTest`](../../test/integration/ForcedEthRefund.t.sol) (9 integration)
 **Covers:** roadmap items 5.1 to 5.10, 8.10 · [Guide 3, Section 5](../03-architecture.md#5-oracle-system-pyth--chainlink)
 
 ---
@@ -30,7 +30,7 @@ The Pyth surface is the SDK's [`MockPyth`](../../lib/pyth-sdk-solidity/MockPyth.
 | [`test_getPrice_normalizesTo1e18`](../../test/unit/PythChainlinkOracle.t.sol#L79) | Pyth `2000e8`, expo `-8` → `2000e18` price and `2e18` conf |
 | [`test_getPrice_positiveExpoScalesUp`](../../test/unit/PythChainlinkOracle.t.sol#L85) | A positive expo scales the mantissa *up*: `20 * 10^2 = 2000` still normalizes to `2000e18` |
 | [`test_chainlink_nonEightDecimalsNormalize`](../../test/unit/PythChainlinkOracle.t.sol#L96) | An 18-decimal anchor at `$2000` anchors identically to the 8-decimal one |
-| [`test_getPrice_revertsOnAnchorOver18Decimals`](../../test/unit/PythChainlinkOracle.t.sol#L358) | A feed reporting more than 18 decimals cannot be normalized: `InvalidConfiguration("decimals")` |
+| [`test_getPrice_revertsOnAnchorOver18Decimals`](../../test/unit/PythChainlinkOracle.t.sol#L389) | A feed reporting more than 18 decimals cannot be normalized: `InvalidConfiguration("decimals")` |
 
 The positive-expo test exists because the target exponent is `18 + expo`: the common case (`expo = -8`) scales down, but the branch that scales up is only reachable with a positive expo and must be pinned separately.
 
@@ -54,6 +54,9 @@ The oracle reads the stored Pyth price with `getPriceUnsafe` and applies its *ow
 | :--- | :------ |
 | [`test_getPrice_revertsOnWideConfidence`](../../test/unit/PythChainlinkOracle.t.sol#L147) | conf `$50` on `$2000` = 250 bps > 200 → `ConfidenceTooWide` |
 | [`test_getPrice_acceptsConfidenceAtBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L156) | conf `$40` = exactly 200 bps is accepted (the check is strict-greater-than) |
+| [`test_getPrice_revertsOnConfidenceJustAboveLimit`](../../test/unit/PythChainlinkOracle.t.sol#L163) | conf `$40.10` = 200.5 bps reverts `ConfidenceTooWide(weth, 201, 200)`: half a basis point over the limit is over the limit |
+
+The check rejects when `conf * 10_000 > MAX_CONFIDENCE_BPS * price`, by cross-multiplication with no division, and the reported bps rounds up so it is above the limit whenever the check fires. The previous form compared a floored `conf * 10_000 / price` and let 200.5 bps through a 200 bps limit; `test_getPrice_revertsOnConfidenceJustAboveLimit` fails against it.
 
 ---
 
@@ -61,8 +64,12 @@ The oracle reads the stored Pyth price with `getPriceUnsafe` and applies its *ow
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_getPrice_revertsOnDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L167) | Anchor `$2100` vs Pyth `$2000` = 476 bps > 300 → `PriceDeviationTooHigh` |
-| [`test_getPrice_acceptsWithinDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L176) | Anchor `$2050` = 243 bps is within band, accepted |
+| [`test_getPrice_revertsOnDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L177) | Anchor `$2100` vs Pyth `$2000` = 476.19 bps > 300 → `PriceDeviationTooHigh`, reported rounded up as 477 |
+| [`test_getPrice_revertsOnDeviationJustAboveLimit`](../../test/unit/PythChainlinkOracle.t.sol#L186) | Pyth `$2060.10` vs anchor `$2000` = 300.5 bps reverts `PriceDeviationTooHigh(weth, 301, 300)` |
+| [`test_getPrice_acceptsDeviationAtBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L198) | Pyth `$2060` vs anchor `$2000` = exactly 300 bps is accepted |
+| [`test_getPrice_acceptsWithinDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L207) | Anchor `$2050` = 243 bps is within band, accepted |
+
+The deviation check has the same exact form, rejecting when `|pyth - anchor| * 10_000 > MAX_DEVIATION_BPS * anchor`, with the reported bps rounded up. `test_getPrice_revertsOnDeviationJustAboveLimit` fails against the previous floored form.
 
 Chainlink is **not** a fallback: it only bounds the Pyth price. When it deviates, the read reverts; the protocol never substitutes the anchor for the primary price.
 
@@ -72,9 +79,9 @@ Chainlink is **not** a fallback: it only bounds the Pyth price. When it deviates
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_getPrice_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L187) | A non-positive Pyth price reverts `ZeroPrice` |
-| [`test_getPrice_revertsOnNegativeAnchor`](../../test/unit/PythChainlinkOracle.t.sol#L193) | A non-positive Chainlink answer reverts `ZeroPrice` |
-| [`test_getPrice_revertsOnUnknownAsset`](../../test/unit/PythChainlinkOracle.t.sol#L199) | An asset with no configured feed reverts `UnknownAsset` |
+| [`test_getPrice_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L218) | A non-positive Pyth price reverts `ZeroPrice` |
+| [`test_getPrice_revertsOnNegativeAnchor`](../../test/unit/PythChainlinkOracle.t.sol#L224) | A non-positive Chainlink answer reverts `ZeroPrice` |
+| [`test_getPrice_revertsOnUnknownAsset`](../../test/unit/PythChainlinkOracle.t.sol#L230) | An asset with no configured feed reverts `UnknownAsset` |
 
 ---
 
@@ -82,9 +89,9 @@ Chainlink is **not** a fallback: it only bounds the Pyth price. When it deviates
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_updateAndGetPrice_pushesAndValidates`](../../test/unit/PythChainlinkOracle.t.sol#L208) | A pushed update is stored and its validated price returned |
-| [`test_updateAndGetPrice_refundsSurplus`](../../test/unit/PythChainlinkOracle.t.sol#L221) | Only the Pyth fee is consumed; the surplus is refunded, and the oracle holds no ETH |
-| [`test_updateAndGetPrice_revertsOnInsufficientFee`](../../test/unit/PythChainlinkOracle.t.sol#L235) | `msg.value` below the fee reverts `InsufficientFee` |
+| [`test_updateAndGetPrice_pushesAndValidates`](../../test/unit/PythChainlinkOracle.t.sol#L239) | A pushed update is stored and its validated price returned |
+| [`test_updateAndGetPrice_refundsSurplus`](../../test/unit/PythChainlinkOracle.t.sol#L252) | Only the Pyth fee is consumed; the surplus is refunded, and the oracle holds no ETH |
+| [`test_updateAndGetPrice_revertsOnInsufficientFee`](../../test/unit/PythChainlinkOracle.t.sol#L266) | `msg.value` below the fee reverts `InsufficientFee` |
 
 ---
 
@@ -94,18 +101,18 @@ The oracle is immutable policy: no owner, no setters. Every feed is fixed at con
 
 | Test | Guard |
 | :--- | :---- |
-| [`test_constructor_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L248) | non-zero Pyth address |
-| [`test_constructor_revertsOnLengthMismatch`](../../test/unit/PythChainlinkOracle.t.sol#L255) | `assets.length == configs.length` |
-| [`test_constructor_revertsOnZeroFeedId`](../../test/unit/PythChainlinkOracle.t.sol#L263) | non-zero Pyth feed id |
-| [`test_constructor_revertsOnDuplicateAsset`](../../test/unit/PythChainlinkOracle.t.sol#L276) | no duplicate asset |
-| [`test_constructor_revertsOnZeroStaleness`](../../test/unit/PythChainlinkOracle.t.sol#L303) | `maxStaleness > 0` |
-| [`test_constructor_revertsOnConfOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L312) | `0 < maxConfidenceBps < 10_000` |
-| [`test_constructor_revertsOnDeviationOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L321) | `0 < maxDeviationBps < 10_000` |
-| [`test_constructor_revertsOnZeroChainlinkFeed`](../../test/unit/PythChainlinkOracle.t.sol#L330) | non-zero anchor address |
-| [`test_constructor_revertsOnZeroHeartbeat`](../../test/unit/PythChainlinkOracle.t.sol#L338) | `heartbeat > 0` |
-| [`test_constructor_revertsOnZeroAsset`](../../test/unit/PythChainlinkOracle.t.sol#L346) | non-zero asset address |
+| [`test_constructor_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L279) | non-zero Pyth address |
+| [`test_constructor_revertsOnLengthMismatch`](../../test/unit/PythChainlinkOracle.t.sol#L286) | `assets.length == configs.length` |
+| [`test_constructor_revertsOnZeroFeedId`](../../test/unit/PythChainlinkOracle.t.sol#L294) | non-zero Pyth feed id |
+| [`test_constructor_revertsOnDuplicateAsset`](../../test/unit/PythChainlinkOracle.t.sol#L307) | no duplicate asset |
+| [`test_constructor_revertsOnZeroStaleness`](../../test/unit/PythChainlinkOracle.t.sol#L334) | `maxStaleness > 0` |
+| [`test_constructor_revertsOnConfOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L343) | `0 < maxConfidenceBps < 10_000` |
+| [`test_constructor_revertsOnDeviationOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L352) | `0 < maxDeviationBps < 10_000` |
+| [`test_constructor_revertsOnZeroChainlinkFeed`](../../test/unit/PythChainlinkOracle.t.sol#L361) | non-zero anchor address |
+| [`test_constructor_revertsOnZeroHeartbeat`](../../test/unit/PythChainlinkOracle.t.sol#L369) | `heartbeat > 0` |
+| [`test_constructor_revertsOnZeroAsset`](../../test/unit/PythChainlinkOracle.t.sol#L377) | non-zero asset address |
 
-[`test_getFeedConfig_returnsWiring`](../../test/unit/PythChainlinkOracle.t.sol#L367) confirms the stored wiring is readable.
+[`test_getFeedConfig_returnsWiring`](../../test/unit/PythChainlinkOracle.t.sol#L398) confirms the stored wiring is readable.
 
 ---
 
@@ -114,10 +121,10 @@ The oracle is immutable policy: no owner, no setters. Every feed is fixed at con
 | Test | Asserts |
 | :--- | :------ |
 | [`testFuzz_normalizesAcrossExpo`](../../test/fuzz/PythChainlinkOracle.t.sol#L52) | For any expo in `[-18, 0]`, a mantissa normalizes to exactly `mantissa * 10^(18+expo)` |
-| [`testFuzz_confidenceGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L68) | The confidence gate admits exactly `conf/price <= MAX_CONFIDENCE_BPS` and rejects above |
-| [`testFuzz_deviationGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L87) | The deviation gate admits exactly `\|pyth-anchor\|/anchor <= MAX_DEVIATION_BPS` and rejects above |
+| [`testFuzz_confidenceGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L73) | For any price, conf, and expo in `[-18, 0]`, the oracle accepts if and only if `conf * 10_000 <= MAX_CONFIDENCE_BPS * price`, and a rejection reports `ceil(conf * 10_000 / price)` |
+| [`testFuzz_deviationGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L105) | For any price from $1 to $1,000,000 and anchor on either side, the oracle accepts if and only if `\|pyth - anchor\| * 10_000 <= MAX_DEVIATION_BPS * anchor`, and a rejection reports `ceil(\|pyth - anchor\| * 10_000 / anchor)` |
 
-Each gate fuzz recomputes the threshold independently and asserts accept-or-revert against it, so the boundary is proven inclusive on the accept side and exclusive on the reject side across the whole range.
+Each gate fuzz recomputes the condition by cross-multiplication in plain integer arithmetic and asserts accept-or-revert, with the exact error payload, against it. Half the runs draw the input from a window of `[MAX - 1, MAX + 2]` bps around the limit, a third of which lies strictly inside `(MAX, MAX + 1)`, the band where a floored ratio would pass; the other half draw from the whole range.
 
 ---
 
@@ -138,10 +145,10 @@ The same real oracle behind the two liquidation entry points. Nothing else reach
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_absorbAgainstRealOracle_seizesSettlesAndRefunds`](../../test/integration/OracleMarketLiquidation.t.sol#L138) | Before the push, `isLiquidatable` reverts `PriceDeviationTooHigh` (stored $2,000 Pyth against the $1,700 anchor, 1,764 bps), so only the absorb's own update prices her. Credit `10 * 1,700 * 93% = 15,810` against 15,000 debt: debt wiped, 810 USDC surplus credited as supply, 10 WETH moved to seized inventory, reserves down by exactly 15,810; only `4 wei` of Pyth fee consumed, and market and oracle hold no ETH |
-| [`test_absorbRevertsWhenUnderfunded`](../../test/integration/OracleMarketLiquidation.t.sol#L165) | `absorb` with `msg.value = 0` reverts `InsufficientFee(0, 2)` on the first per-asset push |
-| [`test_buyCollateralAgainstRealOracle_sellsInventoryAndRefunds`](../../test/integration/OracleMarketLiquidation.t.sol#L176) | After the absorb, 10,000 USDC buys WETH at the 3.5%-discounted ask of $1,640.50 through `_pushBuyPrices`: collateral received equals the quote, inventory drawn down by it, reserves up by exactly the base paid; only `4 wei` consumed and no ETH retained |
-| [`test_buyCollateralRevertsWhenUnderfunded`](../../test/integration/OracleMarketLiquidation.t.sol#L203) | `buyCollateral` with `msg.value = 0` reverts `InsufficientFee(0, 2)` |
+| [`test_absorbAgainstRealOracle_seizesSettlesAndRefunds`](../../test/integration/OracleMarketLiquidation.t.sol#L138) | Before the push, `isLiquidatable` reverts `PriceDeviationTooHigh` (stored $2,000 Pyth against the $1,700 anchor, 1,764.7 bps, reported as 1,765), so only the absorb's own update prices her. Credit `10 * 1,700 * 93% = 15,810` against 15,000 debt: debt wiped, 810 USDC surplus credited as supply, 10 WETH moved to seized inventory, reserves down by exactly 15,810; only `4 wei` of Pyth fee consumed, and market and oracle hold no ETH |
+| [`test_absorbRevertsWhenUnderfunded`](../../test/integration/OracleMarketLiquidation.t.sol#L166) | `absorb` with `msg.value = 0` reverts `InsufficientFee(0, 2)` on the first per-asset push |
+| [`test_buyCollateralAgainstRealOracle_sellsInventoryAndRefunds`](../../test/integration/OracleMarketLiquidation.t.sol#L177) | After the absorb, 10,000 USDC buys WETH at the 3.5%-discounted ask of $1,640.50 through `_pushBuyPrices`: collateral received equals the quote, inventory drawn down by it, reserves up by exactly the base paid; only `4 wei` consumed and no ETH retained |
+| [`test_buyCollateralRevertsWhenUnderfunded`](../../test/integration/OracleMarketLiquidation.t.sol#L204) | `buyCollateral` with `msg.value = 0` reverts `InsufficientFee(0, 2)` |
 
 > **Mutation check.** Removing `_refundExcessValue()` from `absorb` and `buyCollateral` fails three of the four tests (the spent-ETH assertions, and the underfunded buy, which the stranded absorb budget then silently funds).
 
@@ -158,7 +165,7 @@ The unit suite proves each check reverts in the oracle; this suite proves what t
 | [`test_staleAnchor_blocksAbsorbDespiteAFreshUpdate`](../../test/integration/OracleFailureModes.t.sol#L246) | A fresh signed update does not cure a stale anchor: the absorb reverts until Chainlink itself updates, then succeeds |
 | [`test_staleAnchor_blocksBuyCollateral`](../../test/integration/OracleFailureModes.t.sol#L261) | `buyCollateral` reverts `StaleAnchor` on the asset being bought |
 | [`test_confidenceTooWide_blocksBorrow`](../../test/integration/OracleFailureModes.t.sol#L277) | A $50 band on $2,000 (250 bps) reverts the borrow `ConfidenceTooWide(weth, 250, 200)` |
-| [`test_confidenceTooWide_blocksAbsorb`](../../test/integration/OracleFailureModes.t.sol#L291) | A $40 band on the $1,700 crash (235 bps, floored) reverts the absorb |
+| [`test_confidenceTooWide_blocksAbsorb`](../../test/integration/OracleFailureModes.t.sol#L291) | A $40 band on the $1,700 crash (235.29 bps, reported rounded up as 236) reverts the absorb |
 | [`test_confidenceTooWide_blocksBuyCollateral`](../../test/integration/OracleFailureModes.t.sol#L305) | The same band reverts `buyCollateral` |
 | [`test_brokenCollateralFeed_blocksBorrowForAnAccountHoldingIt`](../../test/integration/OracleFailureModes.t.sol#L332) | With only the WBTC anchor stale, carol's borrow reverts `StaleAnchor(wbtc, ...)` although her WETH alone would cover it |
 | [`test_brokenCollateralFeed_blocksWithdrawingOtherCollateral`](../../test/integration/OracleFailureModes.t.sol#L342) | Withdrawing WETH, whose feed is healthy, reverts on the WBTC anchor |
