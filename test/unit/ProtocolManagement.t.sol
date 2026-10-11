@@ -231,6 +231,19 @@ contract ProtocolManagementTest is Test {
         _deploy(c); // does not revert
     }
 
+    /// @dev The floor rounds up: liquidateCF 8,501 bps gives 8,501 * 1.02 = 8,671.02 bps, so the floor
+    ///      is 8,672. The floored value 8,671 reverts; 8,672 deploys.
+    function test_constructor_coverageFloorRoundsUp() public {
+        ILendingMarket.CollateralConfig memory c = MarketBuilder.collateral(address(weth), 18, 1_000e18);
+        c.liquidateCollateralFactor = 8_501;
+        c.liquidationFactor = 8_671;
+        vm.expectRevert(abi.encodeWithSelector(ILendingMarket.InvalidConfiguration.selector, bytes32("coverage")));
+        _deploy(c);
+
+        c.liquidationFactor = 8_672;
+        _deploy(c); // does not revert
+    }
+
     /// @dev The coverage floor tracks the oracle's confidence ceiling: a wider band raises it.
     function test_constructor_coverageFloorTracksOracleConfidence() public {
         oracle.setMaxConfidenceBps(1_000); // 10%: floor becomes 85% * 1.10 = 93.5% > 93%

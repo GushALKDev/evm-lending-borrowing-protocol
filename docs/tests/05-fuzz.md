@@ -1,7 +1,7 @@
 # Fuzz Tests
 
 **Section:** [Testing Documentation](./README.md)
-**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (6) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (3)
+**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (6) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (3) · [`ValuationRounding.t.sol`](../../test/fuzz/ValuationRounding.t.sol) (11)
 **Phases:** 1-2, 8
 **Prev:** [Unit: Interest Rate Model](./04-unit-rate-model.md) · **Next:** [Mutation Checks](./06-mutation-checks.md)
 
@@ -98,3 +98,25 @@ The storefront quote (`quoteCollateral`) is the third rounding surface after con
 | [`testFuzz_quoteCollateral_floorsExactly`](../../test/fuzz/QuoteRounding.t.sol#L74)         | Equals the exact truncated quote across the whole price and factor domain; a flipped floor → ceil fails by one wei. |
 | [`testFuzz_quoteCollateral_isMonotone`](../../test/fuzz/QuoteRounding.t.sol#L101)           | A larger base payment never quotes strictly less collateral: no non-monotone region.        |
 | [`testFuzz_askPrice_neverAboveSpot`](../../test/fuzz/QuoteRounding.t.sol#L119)              | The discount can only lower the ask, so a discounted market yields at least as much collateral per base as the undiscounted spot. |
+
+---
+
+## 5. `ValuationRounding.t.sol` (11 tests: 6 fuzzed, 5 deterministic)
+
+The valuation divisions behind health checks and absorb, and the constructor's coverage bound. The capacity and absorb tests elsewhere assert inequalities, booleans, or allow one unit of slack, which a flipped direction can pass; the [mutation pass](./06-mutation-checks.md) records which sites survived before these tests existed. These pin each one against a value computed in the test with plain integer arithmetic, through the [harness](../../test/mocks/LendingMarketHarness.sol) wrappers `exposedDebtUSD`, `exposedBorrowCapacity`, `exposedLiquidationCapacity` and `exposedSeizeCollateral` where the public surface only exposes a bool or a settlement. Prices are fuzzed at full 1e18 precision rather than at round values, so a quotient is exact only when the product happens to be a multiple of the divisor, and every site also has a deterministic case with a known non-zero remainder.
+
+| Test | Asserts |
+| :--- | :------ |
+| [`testFuzz_debtUSD_ceilsExactly`](../../test/fuzz/ValuationRounding.t.sol#L83) | `_debtUSD` equals `ceil(debtPV * (basePrice + baseConf) / BASE_SCALE)`, at a fuzzed borrow index |
+| [`test_debtUSD_roundsUp`](../../test/fuzz/ValuationRounding.t.sol#L101) | 3 base units at a base price of `1e18 + 1`: `3e12 + 1`, not `3e12` |
+| [`testFuzz_borrowCapacity_floorsExactly`](../../test/fuzz/ValuationRounding.t.sol#L112) | `_borrowCapacity` equals `floor(balance * borrowCF * (price - conf) / (1e18 * FACTOR_SCALE))` |
+| [`test_borrowCapacity_roundsDown`](../../test/fuzz/ValuationRounding.t.sol#L124) | `1e18 + 1` wei at a low edge of 1,997 USD: `1,597.6e18 + 1,597`, remainder 0.6 |
+| [`testFuzz_liquidationCapacity_floorsExactly`](../../test/fuzz/ValuationRounding.t.sol#L131) | `_liquidationCapacity` equals `floor(balance * liquidateCF * (price + conf) / (1e18 * FACTOR_SCALE))` |
+| [`test_liquidationCapacity_roundsDown`](../../test/fuzz/ValuationRounding.t.sol#L143) | `1e18 + 1` wei at a high edge of 2,003 USD: `1,702.55e18 + 1,702`, remainder 0.55 |
+| [`testFuzz_seizeCollateral_floorsSeizeAndCreditValue`](../../test/fuzz/ValuationRounding.t.sol#L159) | The `AbsorbCollateral` value is `floor(amount * price / 1e18)` and the credit the seize loop returns is `floor(amount * liquidationFactor * price / (1e18 * FACTOR_SCALE))` |
+| [`test_seizeCollateral_roundsDown`](../../test/fuzz/ValuationRounding.t.sol#L175) | `10e18 + 3` wei at `1,700e18 + 1`: seize value `17,000e18 + 5,110` and credit `15,810e18 + 4,752`, both with non-zero remainders |
+| [`testFuzz_absorb_creditBaseFloorsExactly`](../../test/fuzz/ValuationRounding.t.sol#L191) | A real `absorb` settles against `creditBase = floor(creditValue * BASE_SCALE / basePrice)`: the `AbsorbDebt` bad debt and the surplus supply balance match it exactly, with the debt drawn on both sides of `creditBase` |
+| [`test_absorb_creditBaseRoundsDown`](../../test/fuzz/ValuationRounding.t.sol#L218) | Base at 1.0001 USD: the credit converts to 15,808.419158 USDC, leaving a 808.419158 surplus on a 15,000 debt |
+| [`testFuzz_coverageBound_ceilsExactly`](../../test/fuzz/ValuationRounding.t.sol#L237) | For any `liquidateCF` and oracle `MAX_CONFIDENCE_BPS`, one below `ceil(liquidateCF * (FACTOR_SCALE + MAX_CONFIDENCE_BPS) / FACTOR_SCALE)` reverts `InvalidConfiguration("coverage")` and the bound itself deploys |
+
+`seizeValueUSD` only feeds the `AbsorbCollateral` event, so `vm.expectEmit` with the exact value is the only way to observe its direction.

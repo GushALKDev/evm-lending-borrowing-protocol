@@ -46,8 +46,9 @@ The guardian can only add flags (the new set must be a superset of the current o
 | :--- | :------ |
 | [`test_constructor_revertsWhenCoverageConditionFails`](../../test/unit/ProtocolManagement.t.sol#L220) | **INV-13.** A `liquidationFactor` below `liquidateCF * (1 + maxConfidenceBps)` (86% < 86.7% floor at 200 bps) reverts `InvalidConfiguration("coverage")` |
 | [`test_constructor_acceptsCoverageAtTheFloor`](../../test/unit/ProtocolManagement.t.sol#L228) | Exactly at the floor (86.7%) is accepted: the bound is `>=`, rounded up |
-| [`test_constructor_coverageFloorTracksOracleConfidence`](../../test/unit/ProtocolManagement.t.sol#L235) | A wider oracle band (10%) raises the floor to 93.5%, so the reference 93% factor now fails: the floor tracks `MAX_CONFIDENCE_BPS` read from the oracle |
-| [`test_constructor_revertsOnBorrowCFAboveLiquidateCF`](../../test/unit/ProtocolManagement.t.sol#L243) | INV-12: `borrowCF` must be strictly below `liquidateCF` |
-| [`test_constructor_revertsOnZeroSupplyCap`](../../test/unit/ProtocolManagement.t.sol#L250) | A zero supply cap is rejected |
+| [`test_constructor_coverageFloorRoundsUp`](../../test/unit/ProtocolManagement.t.sol#L236) | The floor rounds up: `liquidateCF` 8,501 bps gives 8,671.02, so 8,671 (the floored bound) reverts `InvalidConfiguration("coverage")` and 8,672 deploys. The reference 8,500 gives an exact 8,670, where floor and ceil agree, so the tests above cannot see the direction |
+| [`test_constructor_coverageFloorTracksOracleConfidence`](../../test/unit/ProtocolManagement.t.sol#L248) | A wider oracle band (10%) raises the floor to 93.5%, so the reference 93% factor now fails: the floor tracks `MAX_CONFIDENCE_BPS` read from the oracle |
+| [`test_constructor_revertsOnBorrowCFAboveLiquidateCF`](../../test/unit/ProtocolManagement.t.sol#L256) | INV-12: `borrowCF` must be strictly below `liquidateCF` |
+| [`test_constructor_revertsOnZeroSupplyCap`](../../test/unit/ProtocolManagement.t.sol#L263) | A zero supply cap is rejected |
 
 INV-13 (absorb coverage, Guide 2 Section 8): a promptly absorbed account, eligible at the high confidence edge, must still credit enough at the mid price to cover its debt. The worst case widens `liquidateCF` by the oracle's max confidence, so the constructor requires `liquidationFactor >= liquidateCF * (FACTOR_SCALE + MAX_CONFIDENCE_BPS) / FACTOR_SCALE`, reading the ceiling from the wired oracle.

@@ -78,4 +78,29 @@ contract LendingMarketHarness is LendingMarket {
     function exposedPrincipalValue(int256 present) external view returns (int104) {
         return _principalValue(present);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                        VALUATION PRIMITIVES
+    //////////////////////////////////////////////////////////////*/
+
+    // The health checks expose only a bool and absorb only its settlement, so a one-wei change in
+    // these sums is invisible through the public surface. These wrappers let each rounding site be
+    // pinned against its exact expected value.
+
+    function exposedDebtUSD(address account) external view returns (uint256) {
+        return _debtUSD(account);
+    }
+
+    function exposedBorrowCapacity(address account) external view returns (uint256) {
+        return _borrowCapacity(account);
+    }
+
+    function exposedLiquidationCapacity(address account) external view returns (uint256) {
+        return _liquidationCapacity(account);
+    }
+
+    /// @notice Runs the absorb seize loop alone and returns the credit value it accumulates.
+    function exposedSeizeCollateral(address account) external returns (uint256) {
+        return _seizeCollateral(account);
+    }
 }
