@@ -103,10 +103,11 @@ contract ConversionRoundingTest is Test {
                       DIRECTED ROUNDING PER SITE
     //////////////////////////////////////////////////////////////*/
 
-    // Round trips alone are too weak to pin every site: flipping presentValueSupply to round up
-    // partially cancels against principalValueSupply's floor and can survive a round trip
-    // assertion. These four tests pin each division against its exact expected value instead, so
-    // any single flipped rounding direction fails the suite (Guide 6, Section 7 mutation checks).
+    // Round trips alone cannot pin every site: a round trip pins at most the direction of its first
+    // leg and never that of a presentValue conversion, so a flipped presentValueSupply or
+    // presentValueBorrow passes all four round trips above by construction. These four tests pin each
+    // division against its exact expected value instead, so any single flipped rounding direction
+    // fails the suite (Guide 6, Section 7 mutation checks).
 
     /// @notice presentValueSupply floors: it must equal the exact quotient truncated.
     function testFuzz_presentValueSupply_floorsExactly(uint104 principal, uint64 supplyIndex) public {

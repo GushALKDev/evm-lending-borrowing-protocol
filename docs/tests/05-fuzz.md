@@ -26,40 +26,40 @@ Indexes bounded to `[1e15, uint64.max]` (they only grow, and `uint64` at 1e15 ca
 
 ### Directed Rounding, Per Site
 
-Round trips alone are too weak: a flipped `presentValueSupply` partially cancels against `principalValueSupply`'s floor and survives them. These pin each division against a locally computed exact value, so any single flipped direction fails the suite. See [Mutation Checks](./06-mutation-checks.md) for the mutation that made this necessary.
+Round trips alone are too weak: a round trip pins at most the direction of its first leg and never that of a `presentValue` conversion, so a flipped `presentValueSupply` or `presentValueBorrow` passes all four tests above by construction. These pin each division against a locally computed exact value, so any single flipped direction fails the suite. See [Mutation Checks](./06-mutation-checks.md#the-finding-that-shaped-the-suite) for why.
 
 | Test                                                                                                       | Asserts                                                                                      |
 | :------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------------------- |
-| [`testFuzz_presentValueSupply_floorsExactly`](../../test/fuzz/ConversionRounding.t.sol#L112)                | Equals `(principal * supplyIndex) / 1e15` truncated.                                            |
-| [`testFuzz_presentValueBorrow_ceilsExactly`](../../test/fuzz/ConversionRounding.t.sol#L122)                 | Equals the same quotient rounded away from zero.                                                |
-| [`testFuzz_principalValueSupply_floorsExactly`](../../test/fuzz/ConversionRounding.t.sol#L133)              | Equals `(pv * 1e15) / supplyIndex` truncated.                                                   |
-| [`testFuzz_principalValueBorrow_ceilsExactly`](../../test/fuzz/ConversionRounding.t.sol#L143)               | Equals the same quotient ceiled.                                                                |
+| [`testFuzz_presentValueSupply_floorsExactly`](../../test/fuzz/ConversionRounding.t.sol#L113)                | Equals `(principal * supplyIndex) / 1e15` truncated.                                            |
+| [`testFuzz_presentValueBorrow_ceilsExactly`](../../test/fuzz/ConversionRounding.t.sol#L123)                 | Equals the same quotient rounded away from zero.                                                |
+| [`testFuzz_principalValueSupply_floorsExactly`](../../test/fuzz/ConversionRounding.t.sol#L134)              | Equals `(pv * 1e15) / supplyIndex` truncated.                                                   |
+| [`testFuzz_principalValueBorrow_ceilsExactly`](../../test/fuzz/ConversionRounding.t.sol#L144)               | Equals the same quotient ceiled.                                                                |
 
 ### Cross-Side and Structural Properties
 
 | Test                                                                                                          | Asserts                                                                                   |
 | :-------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------ |
-| [`testFuzz_borrowSideNeverValuedBelowSupplySide`](../../test/fuzz/ConversionRounding.t.sol#L154)              | At equal indexes, debt is always valued at least as high as supply: the asymmetry points one way only. |
-| [`testFuzz_debtPrincipalNeverBelowSupplyPrincipal`](../../test/fuzz/ConversionRounding.t.sol#L168)            | The mirror statement on the principal side.                                                 |
-| [`testFuzz_conversionsAreMonotone`](../../test/fuzz/ConversionRounding.t.sol#L182)                            | More present value never yields less principal, on either side: no non-monotone region an attacker could sit on. |
-| [`testFuzz_signedConversionsMatchPrimitives`](../../test/fuzz/ConversionRounding.t.sol#L198)                  | The signed wrappers agree with the unsigned primitives on both branches, and the sign of the result matches the sign of the input. |
-| [`testFuzz_utilization_floorsExactly`](../../test/fuzz/ConversionRounding.t.sol#L221)                         | Utilization floors, the direction [Guide 2, Section 6](../02-mathematics.md#6-interest-split-and-reserve-growth) proves reserve-safe. |
+| [`testFuzz_borrowSideNeverValuedBelowSupplySide`](../../test/fuzz/ConversionRounding.t.sol#L155)              | At equal indexes, debt is always valued at least as high as supply: the asymmetry points one way only. |
+| [`testFuzz_debtPrincipalNeverBelowSupplyPrincipal`](../../test/fuzz/ConversionRounding.t.sol#L169)            | The mirror statement on the principal side.                                                 |
+| [`testFuzz_conversionsAreMonotone`](../../test/fuzz/ConversionRounding.t.sol#L183)                            | More present value never yields less principal, on either side: no non-monotone region an attacker could sit on. |
+| [`testFuzz_signedConversionsMatchPrimitives`](../../test/fuzz/ConversionRounding.t.sol#L199)                  | The signed wrappers agree with the unsigned primitives on both branches, and the sign of the result matches the sign of the input. |
+| [`testFuzz_utilization_floorsExactly`](../../test/fuzz/ConversionRounding.t.sol#L222)                         | Utilization floors, the direction [Guide 2, Section 6](../02-mathematics.md#6-interest-split-and-reserve-growth) proves reserve-safe. |
 
 ### INV-2: Index Monotonicity
 
 | Test                                                                                                          | Asserts                                                                                  |
 | :-------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------- |
-| [`testFuzz_accrual_indexesAreMonotone`](../../test/fuzz/ConversionRounding.t.sol#L240)                        | Over arbitrary gaps up to a year, neither index ever decreases or falls below the seed.    |
-| [`testFuzz_accrual_borrowIndexOutgrowsSupplyIndex`](../../test/fuzz/ConversionRounding.t.sol#L263)            | With `supplyRate <= borrowRate`, the borrow index never falls behind: the reserve cut can only accumulate. |
-| [`testFuzz_accrual_indexRoundingIsDirected`](../../test/fuzz/ConversionRounding.t.sol#L278)                   | The supply index floors and the borrow index ceils on every accrual, pinned against exact locally computed values. |
-| [`testFuzz_accrual_isIdempotentWithinABlock`](../../test/fuzz/ConversionRounding.t.sol#L298)                  | A second `accrue()` in the same block moves nothing, for any rate: accrual is not double-applicable. |
+| [`testFuzz_accrual_indexesAreMonotone`](../../test/fuzz/ConversionRounding.t.sol#L241)                        | Over arbitrary gaps up to a year, neither index ever decreases or falls below the seed.    |
+| [`testFuzz_accrual_borrowIndexOutgrowsSupplyIndex`](../../test/fuzz/ConversionRounding.t.sol#L264)            | With `supplyRate <= borrowRate`, the borrow index never falls behind: the reserve cut can only accumulate. |
+| [`testFuzz_accrual_indexRoundingIsDirected`](../../test/fuzz/ConversionRounding.t.sol#L279)                   | The supply index floors and the borrow index ceils on every accrual, pinned against exact locally computed values. |
+| [`testFuzz_accrual_isIdempotentWithinABlock`](../../test/fuzz/ConversionRounding.t.sol#L299)                  | A second `accrue()` in the same block moves nothing, for any rate: accrual is not double-applicable. |
 
 ### INV-1: Single Accounting Path
 
 | Test                                                                                                                        | Asserts                                                                        |
 | :------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------- |
-| [`testFuzz_accountingPath_totalsMatchPrincipalsAcrossCrossings`](../../test/fuzz/ConversionRounding.t.sol#L320)               | Three consecutive arbitrary principals (any sign, any order) leave the totals exactly matching the split principal after every write. |
-| [`testFuzz_accountingPath_totalsMatchTwoAccounts`](../../test/fuzz/ConversionRounding.t.sol#L341)                             | INV-1 across two accounts moving independently, including opposite signs.        |
+| [`testFuzz_accountingPath_totalsMatchPrincipalsAcrossCrossings`](../../test/fuzz/ConversionRounding.t.sol#L321)               | Three consecutive arbitrary principals (any sign, any order) leave the totals exactly matching the split principal after every write. |
+| [`testFuzz_accountingPath_totalsMatchTwoAccounts`](../../test/fuzz/ConversionRounding.t.sol#L342)                             | INV-1 across two accounts moving independently, including opposite signs.        |
 
 ---
 
