@@ -7,7 +7,7 @@
 
 ---
 
-Every test here with fuzzed parameters runs 1,000 times under the default profile and 10,000 under the `deep` profile (run locally before merging; CI uses the default). Across the whole fuzz layer (43 tests in `test/fuzz`, some documented on other pages), 41 take fuzzed parameters; the two `test_` entries in `IndexPrecision.t.sol` are deterministic and run once. This is where the solvency thesis is argued: every assertion pins a rounding *direction*, never a dust magnitude.
+Every test here with fuzzed parameters runs 1,000 times under the default profile and 10,000 under the `deep` profile (run locally before merging; CI uses the default). Across the whole fuzz layer (56 tests in `test/fuzz`, some documented on other pages), 49 take fuzzed parameters; the seven `test_` entries, two in `IndexPrecision.t.sol` and five in `ValuationRounding.t.sol`, are deterministic and run once. This is where the solvency thesis is argued: every assertion pins a rounding *direction*, never a dust magnitude.
 
 ---
 

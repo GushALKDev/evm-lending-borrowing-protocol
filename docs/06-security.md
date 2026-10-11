@@ -292,7 +292,7 @@ Scenario playbook. Each row starts from no flags and adds only the flags with a 
 ### Meta
 
 - [x] All Slither/Aderyn findings triaged in writing ([Static Analysis](./tests/14-static-analysis.md))
-- [x] Test suite from Section 7 green with coverage >95% (331 tests; lines, statements, branches and functions above 95% on every contract, see [Testing Documentation](./tests/README.md#coverage))
+- [x] Test suite from Section 7 green with coverage >95% (350 tests; lines, statements, branches and functions above 95% on every contract, see [Testing Documentation](./tests/README.md#coverage))
 - [ ] Every ADR in [Guide 3](./03-architecture.md#8-architecture-decision-records) still matches the implemented behavior
 
 ---

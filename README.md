@@ -106,8 +106,8 @@ isBorrowCollateralized(account) after every health-reducing call;
 
 | Area | Result |
 | :--- | :----- |
-| Tests | 331, all green: 236 unit, 43 in `test/fuzz`, 32 integration, 17 stateful invariant, 3 fork |
-| Fuzzing | 41 of the 43 tests in `test/fuzz` take fuzzed inputs and run 1,000 times each (41,000 runs); the other 2 are deterministic. Each of the 17 invariant tests runs 1,000 sequences of 100 calls (1,700,000 calls) |
+| Tests | 350, all green: 242 unit, 56 in `test/fuzz`, 32 integration, 17 stateful invariant, 3 fork |
+| Fuzzing | 49 of the 56 tests in `test/fuzz` take fuzzed inputs and run 1,000 times each (49,000 runs); the other 7 are deterministic. Each of the 17 invariant tests runs 1,000 sequences of 100 calls (1,700,000 calls) |
 | Coverage | Above 95% on lines, statements, branches and functions on every contract |
 | Fork tests | The oracle against the real Pyth pull contract and Chainlink feeds, and supply, borrow, accrual and repay against real USDC and WETH at a pinned mainnet block |
 | Static analysis | Slither: 0 findings. Aderyn: 12 detector categories, all triaged (4 false positives, 8 intended design or accepted gas choices, none a vulnerability) |

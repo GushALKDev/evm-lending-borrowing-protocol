@@ -25,34 +25,35 @@
 | **[Invariant Suite](./12-invariant.md)** | Phase 8: the StdInvariant handler, 17 invariants (INV-1 to INV-11, INV-14, the reserve table, absorb eligibility, repay under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, the revert allowlist) and their mutation checks; the self-transfer minting bug it found |
 | **[Fork Tests](./13-fork.md)** | Phase 8: the full lifecycle on an Ethereum mainnet fork against real USDC/WETH, real Pyth, and real Chainlink, via a cached Hermes VAA |
 | **[Static Analysis](./14-static-analysis.md)** | Phase 8: the Slither + Aderyn run, the dead code removed, and every false positive triaged with justification |
-| **[Fuzz](./05-fuzz.md)**                       | Conversion rounding, index monotonicity, rate properties, index-scale precision |
-| **[Mutation Checks](./06-mutation-checks.md)** | Which flipped rounding direction each test catches, and the one that round trips missed |
+| **[Fuzz](./05-fuzz.md)**                       | Conversion rounding, index monotonicity, rate properties, index-scale precision, quote and valuation rounding |
+| **[Mutation Checks](./06-mutation-checks.md)** | Every rounding site flipped by hand, the tests that catch each, and why round trips cannot |
 | **[Gaps & Roadmap](./07-gaps-and-roadmap.md)** | What is not covered yet, and the testing deliverable of each remaining phase |
 
 ---
 
 ## Current Status
 
-**331 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis (Slither: 0 findings; Aderyn: 12 detector categories flagged, all triaged in [Static Analysis](./14-static-analysis.md), 4 false positives and 8 intended design, style, or accepted gas choices, none a vulnerability), coverage above 95% on every contract, directed-rounding fuzz on the storefront quote, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
+**350 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis (Slither: 0 findings; Aderyn: 12 detector categories flagged, all triaged in [Static Analysis](./14-static-analysis.md), 4 false positives and 8 intended design, style, or accepted gas choices, none a vulnerability), coverage above 95% on every contract, an exact-value test on every rounding site, each checked against its flipped mutant, oracle confidence and deviation checks compared exactly, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
 | [`LendingMarketAccountingTest`](../../test/unit/LendingMarketAccounting.t.sol) | Unit  |    36 | 1     |
 | [`SupplyWithdrawTest`](../../test/unit/SupplyWithdraw.t.sol)          | Unit  |    48 | 3     |
 | [`BorrowRepayTest`](../../test/unit/BorrowRepay.t.sol)                | Unit  |    59 | 4     |
-| [`InterestRateModelTest`](../../test/unit/InterestRateModel.t.sol)    | Unit  |    18 | 2     |
+| [`InterestRateModelTest`](../../test/unit/InterestRateModel.t.sol)    | Unit  |    19 | 2     |
 | [`MarketAccrualWithRealCurveTest`](../../test/unit/MarketAccrualWithRealCurve.t.sol) | Unit |  4 | 2     |
 | [`AccrualOverflowTest`](../../test/unit/AccrualOverflow.t.sol)        | Unit  |     3 | 1     |
-| [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol)| Unit  |    28 | 5     |
+| [`PythChainlinkOracleTest`](../../test/unit/PythChainlinkOracle.t.sol)| Unit  |    32 | 5     |
 | [`AbsorbLiquidationTest`](../../test/unit/AbsorbLiquidation.t.sol)    | Unit  |    22 | 6     |
-| [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol)  | Unit  |    18 | 7     |
+| [`ProtocolManagementTest`](../../test/unit/ProtocolManagement.t.sol)  | Unit  |    19 | 7     |
 | [`ConversionRoundingTest`](../../test/fuzz/ConversionRounding.t.sol)  | Fuzz  |    19 | 1     |
-| [`InterestRateModelFuzzTest`](../../test/fuzz/InterestRateModel.t.sol)| Fuzz  |     6 | 2     |
+| [`InterestRateModelFuzzTest`](../../test/fuzz/InterestRateModel.t.sol)| Fuzz  |     7 | 2     |
 | [`BorrowCapacityFuzzTest`](../../test/fuzz/BorrowCapacity.t.sol)      | Fuzz  |     6 | 4     |
 | [`IndexPrecisionTest`](../../test/fuzz/IndexPrecision.t.sol)          | Fuzz  |     4 | 1     |
-| [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) | Fuzz | 3 | 5     |
+| [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) | Fuzz | 4 | 5     |
 | [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) | Fuzz | 2 | 6     |
 | [`QuoteRoundingTest`](../../test/fuzz/QuoteRounding.t.sol)            | Fuzz  |     3 | 8     |
+| [`ValuationRoundingTest`](../../test/fuzz/ValuationRounding.t.sol)    | Fuzz  |    11 | 8     |
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
 | [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) | Integration | 4 | 8 |
 | [`OracleFailureModesTest`](../../test/integration/OracleFailureModes.t.sol) | Integration | 15 | 8 |
@@ -61,29 +62,30 @@
 | [`DeployScriptTest`](../../test/integration/DeployScript.t.sol)       | Integration | 1 | 8 |
 | [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 17 | 8 |
 | [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 3 | 8 |
-| **Total**                                                            |       | **331** |     |
+| **Total**                                                            |       | **350** |     |
 
 | Layer (directory) | Tests |
 | :---------------- | ----: |
-| Unit (`test/unit`) | 236 |
-| Fuzz (`test/fuzz`) | 43 |
+| Unit (`test/unit`) | 242 |
+| Fuzz (`test/fuzz`) | 56 |
 | Integration (`test/integration`) | 32 |
 | Invariant (`test/invariant`) | 17 |
 | Fork (`test/fork`) | 3 |
-| **Total** | **331** |
+| **Total** | **350** |
 
-The fuzz layer has 43 tests. 41 of them take fuzzed parameters and run 1,000 times each under the default profile; the other 2 (`test_indexScale_assumesSixDecimalBase` and `test_indexScale_reportErrorAcrossPositionSizes` in `IndexPrecision.t.sol`) are deterministic and run once. No test outside `test/fuzz` takes fuzzed parameters.
+The fuzz layer has 56 tests. 49 of them take fuzzed parameters and run 1,000 times each under the default profile; the other 7 are deterministic and run once: `test_indexScale_assumesSixDecimalBase` and `test_indexScale_reportErrorAcrossPositionSizes` in `IndexPrecision.t.sol`, and the five fixed-remainder cases in `ValuationRounding.t.sol` (`test_debtUSD_roundsUp`, `test_borrowCapacity_roundsDown`, `test_liquidationCapacity_roundsDown`, `test_seizeCollateral_roundsDown`, `test_absorb_creditBaseRoundsDown`). No test outside `test/fuzz` takes fuzzed parameters.
 
 | Fuzz suite | Tests | Fuzzed (1,000 runs each) | Deterministic (1 run) | Fuzz runs |
 | :--------- | ----: | -----------------------: | --------------------: | --------: |
 | `ConversionRoundingTest` | 19 | 19 | 0 | 19,000 |
-| `InterestRateModelFuzzTest` | 6 | 6 | 0 | 6,000 |
+| `InterestRateModelFuzzTest` | 7 | 7 | 0 | 7,000 |
 | `BorrowCapacityFuzzTest` | 6 | 6 | 0 | 6,000 |
 | `IndexPrecisionTest` | 4 | 2 | 2 | 2,000 |
-| `PythChainlinkOracleFuzzTest` | 3 | 3 | 0 | 3,000 |
+| `PythChainlinkOracleFuzzTest` | 4 | 4 | 0 | 4,000 |
 | `QuoteRoundingTest` | 3 | 3 | 0 | 3,000 |
 | `AbsorbLiquidationFuzzTest` | 2 | 2 | 0 | 2,000 |
-| **Total** | **43** | **41** | **2** | **41,000** |
+| `ValuationRoundingTest` | 11 | 6 | 5 | 6,000 |
+| **Total** | **56** | **49** | **7** | **49,000** |
 
 Each of the 17 invariants runs 1,000 sequences of 100 calls (100,000 calls each, 1,700,000 in total). The fork suite runs against the pinned mainnet block when `FORK_RPC_URL` is set and passes as a no-op otherwise; the counts above are the same in both modes.
 
@@ -93,7 +95,7 @@ Each of the 17 invariants runs 1,000 sequences of 100 calls (100,000 calls each,
 | :-------------------------- | :--------------- | :--------------- | :------------- | :-------------- |
 | `src/InterestRateModel.sol` | 100.00% (17/17)  | 100.00% (25/25)  | 100.00% (4/4)  | 100.00% (3/3)   |
 | `src/LendingMarket.sol`     | 99.72% (361/362) | 99.79% (485/486) | 98.67% (74/75) | 100.00% (62/62) |
-| `src/PythChainlinkOracle.sol` | 98.46% (64/65) | 96.91% (94/97)   | 95.45% (21/22) | 100.00% (8/8)   |
+| `src/PythChainlinkOracle.sol` | 100.00% (64/64) | 98.97% (96/97)  | 95.45% (21/22) | 100.00% (8/8)   |
 
 Every contract is now above the 95% gate on lines, statements, branches, and functions (roadmap 8.9). Phase 8 raised branch coverage on `LendingMarket.sol` from 81.5% to 97.1% by pinning the previously untested revert sides of the input guards (constructor `numAssets`/`collateralAsset`/`liquidateCF`, `ZeroAmount` on every entry point, `InvalidRecipient` on transfer and buyCollateral, and the `RefundFailed` path via a rejecting-receiver caller). The lines and branches still reported as never hit are listed, each with its reason, in [Gaps & Roadmap](./07-gaps-and-roadmap.md#deliberately-unreachable-kept-as-defensive-guards).
 
@@ -145,7 +147,7 @@ Every invariant from [Guide 6, Section 2](../06-security.md#2-system-invariants)
 | INV-10    | `minBorrow` dust guard                            | The stateful [`invariant_INV10_noActionCreatesDustDebt`](../../test/invariant/Invariants.t.sol#L288) (latched on the borrow branch), [`testFuzz_acceptedBorrowNeverLandsInTheDustBand`](../../test/fuzz/BorrowCapacity.t.sol#L196), and the [five dust-guard unit tests](./08-unit-borrow-repay.md#minborrow-dust-guard-43-inv-10) |
 | INV-11    | No debt against an empty pool                     | The stateful [`invariant_INV11_noDebtWithoutSupply`](../../test/invariant/Invariants.t.sol) across sequences, plus [`test_utilization_isZeroWhenSupplyIsZero`](../../test/unit/LendingMarketAccounting.t.sol#L245) for the divide-by-zero guard |
 | INV-12    | Static configuration ordering                     | The [eight constructor tests](./03-unit-supply-withdraw.md#constructor-validation-inv-12) in `SupplyWithdrawTest` and the [six](./04-unit-rate-model.md#constructor-22-inv-12) in `InterestRateModelTest` |
-| INV-13    | Absorb coverage condition                         | Constructor-enforced; the [three coverage tests](./11-protocol-management.md#constructor-revert-matrix-74) in `ProtocolManagementTest` pin it at, below, and above the floor |
+| INV-13    | Absorb coverage condition                         | Constructor-enforced; the [four coverage tests](./11-protocol-management.md#constructor-revert-matrix-74) in `ProtocolManagementTest` pin it at, below, and above the floor and pin its rounding up, and [`testFuzz_coverageBound_ceilsExactly`](../../test/fuzz/ValuationRounding.t.sol#L237) pins the ceiled bound for any `liquidateCF` and `MAX_CONFIDENCE_BPS`; the oracle bound it relies on (`conf/price <= MAX_CONFIDENCE_BPS`) is compared exactly |
 | INV-14    | `supplyRate <= borrowRate`, monotone, continuous  | The stateful [`invariant_INV14_supplyRateAtMostBorrowRate`](../../test/invariant/Invariants.t.sol#L299) at the live utilization, plus [`testFuzz_supplyRateNeverExceedsBorrowRate`](../../test/fuzz/InterestRateModel.t.sol#L60), both [monotonicity fuzz tests](./05-fuzz.md#2-interestratemodeltsol-6-tests), [`testFuzz_continuity_noDownwardStepAcrossTheKink`](../../test/fuzz/InterestRateModel.t.sol#L111) |
 
 ---
