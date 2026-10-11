@@ -11,7 +11,7 @@ Three suites covering the rate curve: in isolation, wired into the market, and a
 
 ---
 
-## 1. `InterestRateModel.t.sol` (18 tests)
+## 1. `InterestRateModel.t.sol` (19 tests)
 
 The curve in isolation, against the reference parameters: kink 80%, reserve factor 10%, slopes sized so the borrow rate is exactly 4% APR at the kink.
 
@@ -43,7 +43,8 @@ The documented table from [Guide 2, Section 5](../02-mathematics.md#5-jump-rate-
 | Test                                                                                                    | Asserts                                                                                      |
 | :--------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
 | [`test_continuity_branchesAgreeAtTheKink`](../../test/unit/InterestRateModel.t.sol#L113)                | One wei below and above the kink, the rate is non-decreasing and the step is bounded by `slopeHigh`: the curve has no jump discontinuity a borrower could be gamed across. |
-| [`test_continuity_upperBranchStartsFromTheKinkRate`](../../test/unit/InterestRateModel.t.sol#L126)      | The upper branch is anchored on the lower branch's exact value at the kink, `slopeLow * kink / 1e18`. |
+| [`test_borrowRate_floorsOnBothBranches`](../../test/unit/InterestRateModel.t.sol#L128)      | Each branch floors at a utilization with a non-zero remainder: `792,744,799` at `0.5e18 + 1`, and `1,268,391,679 + 3,170,979,198` at `0.9e18 + 1`, which also pins the precomputed rate at the kink (`1,268,391,679.2` floored). The documented-table tests above use a 0.1% tolerance and cannot see a one-unit flip. |
+| [`test_continuity_upperBranchStartsFromTheKinkRate`](../../test/unit/InterestRateModel.t.sol#L134)      | The upper branch is anchored on the lower branch's exact value at the kink, `slopeLow * kink / 1e18`. |
 
 ### Reachable Domain and Overflow
 
@@ -51,16 +52,16 @@ The rate functions are **not clamped**. Utilization is bounded by the accounting
 
 | Test                                                                                                            | Asserts                                                                              |
 | :---------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------- |
-| [`test_domain_doesNotRevertThroughOverUtilization`](../../test/unit/InterestRateModel.t.sol#L145)               | Past U = 1 the rate keeps rising, and at 1000% utilization both functions still return. |
-| [`test_domain_overflowIsUnreachablyFarAboveRealUtilization`](../../test/unit/InterestRateModel.t.sol#L156)      | The supply rate's `fullMulDiv` overflow sits at U ≈ 1.9e51, about 33 orders of magnitude above anything the accounting can produce. Pinned from both sides: returns at 1e51, reverts at 2e51. |
-| [`test_domain_borrowRateToleratesEvenHigherUtilization`](../../test/unit/InterestRateModel.t.sol#L174)          | The borrow rate, with one multiplication instead of two, still returns at 1e40 × full utilization. |
+| [`test_domain_doesNotRevertThroughOverUtilization`](../../test/unit/InterestRateModel.t.sol#L153)               | Past U = 1 the rate keeps rising, and at 1000% utilization both functions still return. |
+| [`test_domain_overflowIsUnreachablyFarAboveRealUtilization`](../../test/unit/InterestRateModel.t.sol#L164)      | The supply rate's `fullMulDiv` overflow sits at U ≈ 1.9e51, about 33 orders of magnitude above anything the accounting can produce. Pinned from both sides: returns at 1e51, reverts at 2e51. |
+| [`test_domain_borrowRateToleratesEvenHigherUtilization`](../../test/unit/InterestRateModel.t.sol#L182)          | The borrow rate, with one multiplication instead of two, still returns at 1e40 × full utilization. |
 
 ### Reserve Factor Edge
 
 | Test                                                                                                        | Asserts                                                                                   |
 | :------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------ |
-| [`test_reserveFactor_zeroPassesEverythingToSuppliers`](../../test/unit/InterestRateModel.t.sol#L184)        | With RF = 0 at U = 1, the supply rate equals the borrow rate exactly: nothing is diverted.  |
-| [`test_reserveFactor_divertsTheDocumentedShare`](../../test/unit/InterestRateModel.t.sol#L192)              | With RF = 10% at U = 1, the supply rate is 90% of the borrow rate.                           |
+| [`test_reserveFactor_zeroPassesEverythingToSuppliers`](../../test/unit/InterestRateModel.t.sol#L192)        | With RF = 0 at U = 1, the supply rate equals the borrow rate exactly: nothing is diverted.  |
+| [`test_reserveFactor_divertsTheDocumentedShare`](../../test/unit/InterestRateModel.t.sol#L200)              | With RF = 10% at U = 1, the supply rate is 90% of the borrow rate.                           |
 
 ---
 

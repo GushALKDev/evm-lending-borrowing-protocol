@@ -1,7 +1,7 @@
 # Fuzz Tests
 
 **Section:** [Testing Documentation](./README.md)
-**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (6) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (3) · [`ValuationRounding.t.sol`](../../test/fuzz/ValuationRounding.t.sol) (11)
+**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (7) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (3) · [`ValuationRounding.t.sol`](../../test/fuzz/ValuationRounding.t.sol) (11)
 **Phases:** 1-2, 8
 **Prev:** [Unit: Interest Rate Model](./04-unit-rate-model.md) · **Next:** [Mutation Checks](./06-mutation-checks.md)
 
@@ -63,7 +63,7 @@ Round trips alone are too weak: a round trip pins at most the direction of its f
 
 ---
 
-## 2. `InterestRateModel.t.sol` (6 tests)
+## 2. `InterestRateModel.t.sol` (7 tests)
 
 | Test                                                                                                        | Asserts                                                                                |
 | :-------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
@@ -73,6 +73,7 @@ Round trips alone are too weak: a round trip pins at most the direction of its f
 | [`testFuzz_interestSplit_reserveShareIsNonNegative`](../../test/fuzz/InterestRateModel.t.sol#L76)           | Normalized to one unit of supply, borrower interest `r * U` is always at least supplier interest `s`: the reserve cut can never be negative. Asserted as a directional inequality, never an equality: the two rates floor independently, so no integer identity exists ([Guide 2, Section 6](../02-mathematics.md#6-interest-split-and-reserve-growth)). |
 | [`testFuzz_interestSplit_supplyRateIsFloored`](../../test/fuzz/InterestRateModel.t.sol#L92)                 | Flooring never rounds the supply rate above the real-valued `r * U * (1 - RF)`.            |
 | [`testFuzz_continuity_noDownwardStepAcrossTheKink`](../../test/fuzz/InterestRateModel.t.sol#L111)           | Sweeping deltas around the kink, the curve never steps downward anywhere.                  |
+| [`testFuzz_borrowRate_floorsExactly`](../../test/fuzz/InterestRateModel.t.sol#L128)           | `getBorrowRate` equals `floor(slopeLow * U / 1e18)` below the kink and `floor(slopeLow * kink / 1e18) + floor(slopeHigh * (U - kink) / 1e18)` above it, computed locally, with half the runs on each branch. Pins all three borrow-rate divisions, including the precomputed rate at the kink, which no other test sees at one-unit resolution. |
 
 ---
 
