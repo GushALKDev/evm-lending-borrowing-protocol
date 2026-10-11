@@ -36,7 +36,7 @@ Phase 1 accounting core, tested against a mocked rate model so index behavior ca
 | [`test_principalValueBorrow_roundsUp`](../../test/unit/LendingMarketAccounting.t.sol#L143)              | Debt principal ceils: 1 unit of PV records as principal 1.                                    |
 | [`test_signedConversions_dispatchOnSign`](../../test/unit/LendingMarketAccounting.t.sol#L149)           | The signed wrappers route positive principals to the supply primitive, negative to the borrow one, and map zero to zero in both directions. |
 
-These four rounding sites are the ones that were mutation-verified; see [Mutation Checks](./06-mutation-checks.md).
+These four rounding sites were the first to be mutation-verified; every rounding site in the protocol now is, see [Mutation Checks](./06-mutation-checks.md).
 
 ---
 

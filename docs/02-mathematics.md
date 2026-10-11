@@ -428,20 +428,27 @@ Single rule: **when the protocol and an account are on opposite sides of a divis
 | Debt principal after repay (magnitude)     | ceil             | Borrower             |
 | Utilization                                | floor            | Suppliers (rate side, reserve-safe per Section 6) |
 | `getSupplyRate` (every step)               | floor            | Suppliers            |
+| `getBorrowRate` (every step, including the precomputed rate at the kink) | floor | Suppliers and reserves: borrowers are charged less (see below) |
 | Collateral value in borrow capacity        | floor + `price - conf` | Borrower       |
+| Collateral value in liquidation capacity   | floor + `price + conf` | Borrower (the floor; the `+ conf` edge favors the borrower by design, Section 7) |
 | Debt value in health checks                | ceil + `price + conf`  | Borrower       |
-| Seize credit at absorb                     | floor            | Absorbed account     |
+| Seize credit at absorb (`creditValueUSD`, then `creditBase`) | floor | Absorbed account |
+| Seize value in the `AbsorbCollateral` event | floor (reporting only) | None |
 | `buyCollateral` discount                   | floor            | Buyer                |
+| `buyCollateral` ask price                  | floor            | Reserves: a lower ask quotes the buyer more collateral (see below) |
 | `buyCollateral` quote (collateral out)     | floor            | Buyer                |
 | Oracle confidence check (`conf` vs `price`) | compared by cross-multiplication, no rounding | None |
 | Oracle deviation check (`\|pyth - anchor\|` vs `anchor`) | compared by cross-multiplication, no rounding | None |
 | bps reported in `ConfidenceTooWide` / `PriceDeviationTooHigh` | ceil (reporting only) | None |
+| Pyth normalization when `expo < -18` (price and conf) | floor | Depends on the use (see below) |
+| INV-13 coverage bound in the constructor   | ceil             | None at runtime: the `liquidationFactor` floor is stricter by under 1 bps |
 
 Consequences worth stating:
 
 - Rounding dust accumulates in reserves (Section 6 table); it is never claimable by any account.
 - Directional rounding, not magnitude, is the invariant: fuzz tests assert direction on every operation, not dust size ([Guide 6, Testing Plan](./06-security.md#7-testing-plan)).
 - With 6-decimal USDC one wei of rounding is `1e-6` USDC; `minBorrow` (100 USDC) keeps positions far above the scale where dust is user-visible.
+- Three sites do not follow the single rule and are kept as implemented, each pinned by an exact-value test ([Mutation Checks](./tests/06-mutation-checks.md)). The `buyCollateral` ask price floors, which lowers the ask and so raises the quote before its own floor. `getBorrowRate` floors, so borrowers are charged up to one unit (`1e-18` per second) less; Section 6 still holds, since it is stated for the integer rate actually returned. Pyth normalization floors both price and confidence when `expo < -18`: a lower collateral price favors the protocol, but a lower base price lowers debt value and a narrower confidence band moves both band edges toward the borrower.
 
 ---
 

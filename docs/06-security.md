@@ -348,7 +348,7 @@ Two targets, and only two: the oracle integration and the token integration. Eve
 
 - Slither + Aderyn run locally before each audit gate (Slither config committed in `slither.config.json`), zero unreviewed findings policy, triage recorded in [Static Analysis](./tests/14-static-analysis.md); neither tool runs in CI
 - `forge coverage` >95% lines and branches on `src/`, verified at each phase close and recorded in the [testing docs](./tests/README.md); CI runs coverage as a report, without a threshold gate
-- Mutation-style spot checks on the rounding sites: flip a `mulDivDown` to `mulDivUp` and confirm the suite fails (validates that the tests actually pin the direction)
+- A manual mutation pass over every rounding site: flip each direction (a `fullMulDiv` to `fullMulDivUp` and back) and confirm the suite fails, so the tests actually pin the direction ([Mutation Checks](./tests/06-mutation-checks.md))
 
 ---
 
