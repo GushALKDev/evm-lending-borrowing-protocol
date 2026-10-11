@@ -93,6 +93,27 @@ contract PythChainlinkOracleTest is Test {
         assertEq(price18, 2000e18, "positive expo scales up to 1e18");
     }
 
+    function test_getPrice_expoBelowMinus18ScalesDownAndFloors() public {
+        // expo -20 leaves a target exponent of -2: both mantissas divide by 100 and floor.
+        // 123,456,789,012,345 / 100 = 1,234,567,890,123.45 and 6,789 / 100 = 67.89.
+        MockChainlinkFeed feed18 = new MockChainlinkFeed(18, 1_234_567_890_123, block.timestamp);
+        (address[] memory a, PythChainlinkOracle.FeedConfig[] memory c) =
+            _oneConfig(address(feed18), WETH_FEED_ID, 3600);
+        PythChainlinkOracle o = new PythChainlinkOracle(address(pyth), MAX_STALENESS, MAX_CONF_BPS, MAX_DEV_BPS, a, c);
+
+        vm.warp(block.timestamp + 1);
+        bytes[] memory update = new bytes[](1);
+        update[0] = pyth.createPriceFeedUpdateData(
+            WETH_FEED_ID, 123_456_789_012_345, 6_789, int32(-20), 123_456_789_012_345, 6_789, uint64(block.timestamp)
+        );
+        pyth.updatePriceFeeds{value: FEE}(update);
+        feed18.setAnswer(1_234_567_890_123, block.timestamp);
+
+        (uint256 price18, uint256 conf18) = o.getPrice(WETH);
+        assertEq(price18, 1_234_567_890_123, "price floored");
+        assertEq(conf18, 67, "conf floored");
+    }
+
     function test_chainlink_nonEightDecimalsNormalize() public {
         // An 18-decimal Chainlink feed at $2000 must anchor identically to the 8-decimal one.
         MockChainlinkFeed feed18 = new MockChainlinkFeed(18, 2000e18, block.timestamp);

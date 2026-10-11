@@ -64,6 +64,27 @@ contract PythChainlinkOracleFuzzTest is Test {
         assertEq(conf18, 0, "zero conf stays zero");
     }
 
+    /// @notice For any expo in [-30, -19], a mantissa scales down to the floored quotient
+    ///         `mantissa / 10^-(18+expo)`, and so does the confidence.
+    /// @dev The mantissa is drawn above the divisor so price18 stays positive, and the confidence below
+    ///      1% of the mantissa so the confidence check passes. Most draws are not multiples of the divisor.
+    function testFuzz_normalizesBelowExpoMinus18_floors(uint64 mantissa, uint64 conf, int32 expo) public {
+        expo = int32(bound(int256(expo), -30, -19));
+        uint256 divisor = 10 ** uint256(-(int256(18) + expo));
+        mantissa = uint64(bound(mantissa, divisor, uint64(type(int64).max)));
+        conf = uint64(bound(conf, 0, mantissa / 100));
+
+        uint256 expectedPrice = uint256(mantissa) / divisor;
+        uint256 expectedConf = uint256(conf) / divisor;
+        chainlink.setAnswer(int256(expectedPrice), block.timestamp);
+
+        _push(int64(mantissa), conf, expo);
+
+        (uint256 price18, uint256 conf18) = oracle.getPrice(WETH);
+        assertEq(price18, expectedPrice, "price floored");
+        assertEq(conf18, expectedConf, "conf floored");
+    }
+
     /// @notice The confidence gate accepts if and only if conf * 10,000 <= MAX_CONF_BPS * price, compared
     ///         exactly, and a rejection reports the ratio rounded up.
     /// @dev Half the runs draw conf from a window of [MAX - 1, MAX + 2] bps of the price, a third of which

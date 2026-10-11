@@ -29,10 +29,11 @@ The Pyth surface is the SDK's [`MockPyth`](../../lib/pyth-sdk-solidity/MockPyth.
 | :--- | :------ |
 | [`test_getPrice_normalizesTo1e18`](../../test/unit/PythChainlinkOracle.t.sol#L79) | Pyth `2000e8`, expo `-8` → `2000e18` price and `2e18` conf |
 | [`test_getPrice_positiveExpoScalesUp`](../../test/unit/PythChainlinkOracle.t.sol#L85) | A positive expo scales the mantissa *up*: `20 * 10^2 = 2000` still normalizes to `2000e18` |
-| [`test_chainlink_nonEightDecimalsNormalize`](../../test/unit/PythChainlinkOracle.t.sol#L96) | An 18-decimal anchor at `$2000` anchors identically to the 8-decimal one |
-| [`test_getPrice_revertsOnAnchorOver18Decimals`](../../test/unit/PythChainlinkOracle.t.sol#L389) | A feed reporting more than 18 decimals cannot be normalized: `InvalidConfiguration("decimals")` |
+| [`test_getPrice_expoBelowMinus18ScalesDownAndFloors`](../../test/unit/PythChainlinkOracle.t.sol#L96) | An expo below `-18` divides, and floors: at expo `-20`, price `123,456,789,012,345` and conf `6,789` normalize to `1,234,567,890,123` and `67` |
+| [`test_chainlink_nonEightDecimalsNormalize`](../../test/unit/PythChainlinkOracle.t.sol#L117) | An 18-decimal anchor at `$2000` anchors identically to the 8-decimal one |
+| [`test_getPrice_revertsOnAnchorOver18Decimals`](../../test/unit/PythChainlinkOracle.t.sol#L410) | A feed reporting more than 18 decimals cannot be normalized: `InvalidConfiguration("decimals")` |
 
-The positive-expo test exists because the target exponent is `18 + expo`: the common case (`expo = -8`) scales down, but the branch that scales up is only reachable with a positive expo and must be pinned separately.
+The positive-expo test exists because the target exponent is `18 + expo`: the common case (`expo = -8`) still scales *up* (by `10^10`), and only an expo below `-18` reaches the division branch, which floors both the price and the confidence. Both branches are pinned separately.
 
 ---
 
@@ -40,9 +41,9 @@ The positive-expo test exists because the target exponent is `18 + expo`: the co
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_getPrice_revertsOnStalePyth`](../../test/unit/PythChainlinkOracle.t.sol#L116) | A Pyth price older than `MAX_STALENESS` reverts `StalePrice` |
-| [`test_getPrice_freshAtExactBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L126) | `publishTime + MAX_STALENESS == block.timestamp` is still fresh (the check is strict-less-than) |
-| [`test_getPrice_revertsOnStaleAnchor`](../../test/unit/PythChainlinkOracle.t.sol#L133) | An anchor older than its own heartbeat reverts `StaleAnchor`, even with a fresh Pyth price |
+| [`test_getPrice_revertsOnStalePyth`](../../test/unit/PythChainlinkOracle.t.sol#L137) | A Pyth price older than `MAX_STALENESS` reverts `StalePrice` |
+| [`test_getPrice_freshAtExactBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L147) | `publishTime + MAX_STALENESS == block.timestamp` is still fresh (the check is strict-less-than) |
+| [`test_getPrice_revertsOnStaleAnchor`](../../test/unit/PythChainlinkOracle.t.sol#L154) | An anchor older than its own heartbeat reverts `StaleAnchor`, even with a fresh Pyth price |
 
 The oracle reads the stored Pyth price with `getPriceUnsafe` and applies its *own* `MAX_STALENESS`, not Pyth's `validTimePeriod`, so lending's looser staleness policy governs both the transactional and view paths identically.
 
@@ -52,9 +53,9 @@ The oracle reads the stored Pyth price with `getPriceUnsafe` and applies its *ow
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_getPrice_revertsOnWideConfidence`](../../test/unit/PythChainlinkOracle.t.sol#L147) | conf `$50` on `$2000` = 250 bps > 200 → `ConfidenceTooWide` |
-| [`test_getPrice_acceptsConfidenceAtBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L156) | conf `$40` = exactly 200 bps is accepted (the check is strict-greater-than) |
-| [`test_getPrice_revertsOnConfidenceJustAboveLimit`](../../test/unit/PythChainlinkOracle.t.sol#L163) | conf `$40.10` = 200.5 bps reverts `ConfidenceTooWide(weth, 201, 200)`: half a basis point over the limit is over the limit |
+| [`test_getPrice_revertsOnWideConfidence`](../../test/unit/PythChainlinkOracle.t.sol#L168) | conf `$50` on `$2000` = 250 bps > 200 → `ConfidenceTooWide` |
+| [`test_getPrice_acceptsConfidenceAtBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L177) | conf `$40` = exactly 200 bps is accepted (the check is strict-greater-than) |
+| [`test_getPrice_revertsOnConfidenceJustAboveLimit`](../../test/unit/PythChainlinkOracle.t.sol#L184) | conf `$40.10` = 200.5 bps reverts `ConfidenceTooWide(weth, 201, 200)`: half a basis point over the limit is over the limit |
 
 The check rejects when `conf * 10_000 > MAX_CONFIDENCE_BPS * price`, by cross-multiplication with no division, and the reported bps rounds up so it is above the limit whenever the check fires. The previous form compared a floored `conf * 10_000 / price` and let 200.5 bps through a 200 bps limit; `test_getPrice_revertsOnConfidenceJustAboveLimit` fails against it.
 
@@ -64,10 +65,10 @@ The check rejects when `conf * 10_000 > MAX_CONFIDENCE_BPS * price`, by cross-mu
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_getPrice_revertsOnDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L177) | Anchor `$2100` vs Pyth `$2000` = 476.19 bps > 300 → `PriceDeviationTooHigh`, reported rounded up as 477 |
-| [`test_getPrice_revertsOnDeviationJustAboveLimit`](../../test/unit/PythChainlinkOracle.t.sol#L186) | Pyth `$2060.10` vs anchor `$2000` = 300.5 bps reverts `PriceDeviationTooHigh(weth, 301, 300)` |
-| [`test_getPrice_acceptsDeviationAtBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L198) | Pyth `$2060` vs anchor `$2000` = exactly 300 bps is accepted |
-| [`test_getPrice_acceptsWithinDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L207) | Anchor `$2050` = 243 bps is within band, accepted |
+| [`test_getPrice_revertsOnDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L198) | Anchor `$2100` vs Pyth `$2000` = 476.19 bps > 300 → `PriceDeviationTooHigh`, reported rounded up as 477 |
+| [`test_getPrice_revertsOnDeviationJustAboveLimit`](../../test/unit/PythChainlinkOracle.t.sol#L207) | Pyth `$2060.10` vs anchor `$2000` = 300.5 bps reverts `PriceDeviationTooHigh(weth, 301, 300)` |
+| [`test_getPrice_acceptsDeviationAtBoundary`](../../test/unit/PythChainlinkOracle.t.sol#L219) | Pyth `$2060` vs anchor `$2000` = exactly 300 bps is accepted |
+| [`test_getPrice_acceptsWithinDeviation`](../../test/unit/PythChainlinkOracle.t.sol#L228) | Anchor `$2050` = 243 bps is within band, accepted |
 
 The deviation check has the same exact form, rejecting when `|pyth - anchor| * 10_000 > MAX_DEVIATION_BPS * anchor`, with the reported bps rounded up. `test_getPrice_revertsOnDeviationJustAboveLimit` fails against the previous floored form.
 
@@ -79,9 +80,9 @@ Chainlink is **not** a fallback: it only bounds the Pyth price. When it deviates
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_getPrice_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L218) | A non-positive Pyth price reverts `ZeroPrice` |
-| [`test_getPrice_revertsOnNegativeAnchor`](../../test/unit/PythChainlinkOracle.t.sol#L224) | A non-positive Chainlink answer reverts `ZeroPrice` |
-| [`test_getPrice_revertsOnUnknownAsset`](../../test/unit/PythChainlinkOracle.t.sol#L230) | An asset with no configured feed reverts `UnknownAsset` |
+| [`test_getPrice_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L239) | A non-positive Pyth price reverts `ZeroPrice` |
+| [`test_getPrice_revertsOnNegativeAnchor`](../../test/unit/PythChainlinkOracle.t.sol#L245) | A non-positive Chainlink answer reverts `ZeroPrice` |
+| [`test_getPrice_revertsOnUnknownAsset`](../../test/unit/PythChainlinkOracle.t.sol#L251) | An asset with no configured feed reverts `UnknownAsset` |
 
 ---
 
@@ -89,9 +90,9 @@ Chainlink is **not** a fallback: it only bounds the Pyth price. When it deviates
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_updateAndGetPrice_pushesAndValidates`](../../test/unit/PythChainlinkOracle.t.sol#L239) | A pushed update is stored and its validated price returned |
-| [`test_updateAndGetPrice_refundsSurplus`](../../test/unit/PythChainlinkOracle.t.sol#L252) | Only the Pyth fee is consumed; the surplus is refunded, and the oracle holds no ETH |
-| [`test_updateAndGetPrice_revertsOnInsufficientFee`](../../test/unit/PythChainlinkOracle.t.sol#L266) | `msg.value` below the fee reverts `InsufficientFee` |
+| [`test_updateAndGetPrice_pushesAndValidates`](../../test/unit/PythChainlinkOracle.t.sol#L260) | A pushed update is stored and its validated price returned |
+| [`test_updateAndGetPrice_refundsSurplus`](../../test/unit/PythChainlinkOracle.t.sol#L273) | Only the Pyth fee is consumed; the surplus is refunded, and the oracle holds no ETH |
+| [`test_updateAndGetPrice_revertsOnInsufficientFee`](../../test/unit/PythChainlinkOracle.t.sol#L287) | `msg.value` below the fee reverts `InsufficientFee` |
 
 ---
 
@@ -101,18 +102,18 @@ The oracle is immutable policy: no owner, no setters. Every feed is fixed at con
 
 | Test | Guard |
 | :--- | :---- |
-| [`test_constructor_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L279) | non-zero Pyth address |
-| [`test_constructor_revertsOnLengthMismatch`](../../test/unit/PythChainlinkOracle.t.sol#L286) | `assets.length == configs.length` |
-| [`test_constructor_revertsOnZeroFeedId`](../../test/unit/PythChainlinkOracle.t.sol#L294) | non-zero Pyth feed id |
-| [`test_constructor_revertsOnDuplicateAsset`](../../test/unit/PythChainlinkOracle.t.sol#L307) | no duplicate asset |
-| [`test_constructor_revertsOnZeroStaleness`](../../test/unit/PythChainlinkOracle.t.sol#L334) | `maxStaleness > 0` |
-| [`test_constructor_revertsOnConfOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L343) | `0 < maxConfidenceBps < 10_000` |
-| [`test_constructor_revertsOnDeviationOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L352) | `0 < maxDeviationBps < 10_000` |
-| [`test_constructor_revertsOnZeroChainlinkFeed`](../../test/unit/PythChainlinkOracle.t.sol#L361) | non-zero anchor address |
-| [`test_constructor_revertsOnZeroHeartbeat`](../../test/unit/PythChainlinkOracle.t.sol#L369) | `heartbeat > 0` |
-| [`test_constructor_revertsOnZeroAsset`](../../test/unit/PythChainlinkOracle.t.sol#L377) | non-zero asset address |
+| [`test_constructor_revertsOnZeroPyth`](../../test/unit/PythChainlinkOracle.t.sol#L300) | non-zero Pyth address |
+| [`test_constructor_revertsOnLengthMismatch`](../../test/unit/PythChainlinkOracle.t.sol#L307) | `assets.length == configs.length` |
+| [`test_constructor_revertsOnZeroFeedId`](../../test/unit/PythChainlinkOracle.t.sol#L315) | non-zero Pyth feed id |
+| [`test_constructor_revertsOnDuplicateAsset`](../../test/unit/PythChainlinkOracle.t.sol#L328) | no duplicate asset |
+| [`test_constructor_revertsOnZeroStaleness`](../../test/unit/PythChainlinkOracle.t.sol#L355) | `maxStaleness > 0` |
+| [`test_constructor_revertsOnConfOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L364) | `0 < maxConfidenceBps < 10_000` |
+| [`test_constructor_revertsOnDeviationOutOfRange`](../../test/unit/PythChainlinkOracle.t.sol#L373) | `0 < maxDeviationBps < 10_000` |
+| [`test_constructor_revertsOnZeroChainlinkFeed`](../../test/unit/PythChainlinkOracle.t.sol#L382) | non-zero anchor address |
+| [`test_constructor_revertsOnZeroHeartbeat`](../../test/unit/PythChainlinkOracle.t.sol#L390) | `heartbeat > 0` |
+| [`test_constructor_revertsOnZeroAsset`](../../test/unit/PythChainlinkOracle.t.sol#L398) | non-zero asset address |
 
-[`test_getFeedConfig_returnsWiring`](../../test/unit/PythChainlinkOracle.t.sol#L398) confirms the stored wiring is readable.
+[`test_getFeedConfig_returnsWiring`](../../test/unit/PythChainlinkOracle.t.sol#L419) confirms the stored wiring is readable.
 
 ---
 
@@ -121,8 +122,9 @@ The oracle is immutable policy: no owner, no setters. Every feed is fixed at con
 | Test | Asserts |
 | :--- | :------ |
 | [`testFuzz_normalizesAcrossExpo`](../../test/fuzz/PythChainlinkOracle.t.sol#L52) | For any expo in `[-18, 0]`, a mantissa normalizes to exactly `mantissa * 10^(18+expo)` |
-| [`testFuzz_confidenceGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L73) | For any price, conf, and expo in `[-18, 0]`, the oracle accepts if and only if `conf * 10_000 <= MAX_CONFIDENCE_BPS * price`, and a rejection reports `ceil(conf * 10_000 / price)` |
-| [`testFuzz_deviationGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L105) | For any price from $1 to $1,000,000 and anchor on either side, the oracle accepts if and only if `\|pyth - anchor\| * 10_000 <= MAX_DEVIATION_BPS * anchor`, and a rejection reports `ceil(\|pyth - anchor\| * 10_000 / anchor)` |
+| [`testFuzz_normalizesBelowExpoMinus18_floors`](../../test/fuzz/PythChainlinkOracle.t.sol#L71) | For any expo in `[-30, -19]`, price and conf normalize to the floored quotient `mantissa / 10^-(18+expo)` |
+| [`testFuzz_confidenceGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L94) | For any price, conf, and expo in `[-18, 0]`, the oracle accepts if and only if `conf * 10_000 <= MAX_CONFIDENCE_BPS * price`, and a rejection reports `ceil(conf * 10_000 / price)` |
+| [`testFuzz_deviationGate`](../../test/fuzz/PythChainlinkOracle.t.sol#L126) | For any price from $1 to $1,000,000 and anchor on either side, the oracle accepts if and only if `\|pyth - anchor\| * 10_000 <= MAX_DEVIATION_BPS * anchor`, and a rejection reports `ceil(\|pyth - anchor\| * 10_000 / anchor)` |
 
 Each gate fuzz recomputes the condition by cross-multiplication in plain integer arithmetic and asserts accept-or-revert, with the exact error payload, against it. Half the runs draw the input from a window of `[MAX - 1, MAX + 2]` bps around the limit, a third of which lies strictly inside `(MAX, MAX + 1)`, the band where a floored ratio would pass; the other half draw from the whole range.
 
