@@ -122,20 +122,27 @@ contract InterestRateModelFuzzTest is Test {
                       DIRECTED ROUNDING PER SITE
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice getBorrowRate floors every division: below the kink floor(slopeLow * U / 1e18), above it
-    ///         floor(slopeLow * kink / 1e18) + floor(slopeHigh * (U - kink) / 1e18), so the precomputed
+    /// @notice getBorrowRate ceils every division: below the kink ceil(slopeLow * U / 1e18), above it
+    ///         ceil(slopeLow * kink / 1e18) + ceil(slopeHigh * (U - kink) / 1e18), so the precomputed
     ///         RATE_AT_KINK is pinned too. slopeLow * kink / 1e18 is not exact, nor are most products.
-    function testFuzz_borrowRate_floorsExactly(uint256 utilization, bool belowKink) public view {
+    /// @dev U <= U_FUZZ_MAX = 1e33 and both slopes are below 3.2e10, so every plain product stays below
+    ///      3.2e43, far inside uint256.
+    function testFuzz_borrowRate_ceilsExactly(uint256 utilization, bool belowKink) public view {
         utilization = belowKink ? bound(utilization, 0, KINK) : bound(utilization, KINK + 1, U_FUZZ_MAX);
 
         uint256 expected = utilization <= KINK
-            ? mulDivDown(SLOPE_LOW, utilization)
-            : mulDivDown(SLOPE_LOW, KINK) + mulDivDown(SLOPE_HIGH, utilization - KINK);
-        assertEq(irm.getBorrowRate(utilization), expected, "borrow rate did not floor");
+            ? mulDivUp(SLOPE_LOW, utilization)
+            : mulDivUp(SLOPE_LOW, KINK) + mulDivUp(SLOPE_HIGH, utilization - KINK);
+        assertEq(irm.getBorrowRate(utilization), expected, "borrow rate did not ceil");
     }
 
     /// @dev Local floor(a * b / 1e18), so these assertions do not lean on the contract under test.
     function mulDivDown(uint256 a, uint256 b) internal pure returns (uint256) {
         return (a * b) / RATE_SCALE;
+    }
+
+    /// @dev Local ceil(a * b / 1e18).
+    function mulDivUp(uint256 a, uint256 b) internal pure returns (uint256) {
+        return (a * b + RATE_SCALE - 1) / RATE_SCALE;
     }
 }

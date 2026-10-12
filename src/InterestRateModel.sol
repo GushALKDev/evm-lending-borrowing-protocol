@@ -11,8 +11,10 @@ import {IInterestRateModel} from "./interfaces/IInterestRateModel.sol";
  * @notice Stateless, immutable jump-rate curve: one kinked borrow curve with the supply rate
  *         derived from it, so that non-negative reserve accrual is a theorem rather than a
  *         configuration assumption (Guide 3, ADR-4).
- * @dev Every division floors. Flooring the supply rate only lowers what suppliers receive, which
- *      Guide 2, Section 6 proves is reserve-safe at any utilization, including U > 1e18.
+ * @dev The borrow rate rounds up, so borrowers pay the wei, and the supply rate rounds down, so
+ *      suppliers lose it. The supply rate is derived from that same ceiled borrow rate, and Guide 2,
+ *      Section 6 shows reserves never shrink from rounding for the integer rates returned, at any
+ *      utilization, including U > 1e18.
  */
 contract InterestRateModel is IInterestRateModel {
     /*//////////////////////////////////////////////////////////////
@@ -76,7 +78,7 @@ contract InterestRateModel is IInterestRateModel {
         RESERVE_FACTOR = reserveFactor;
 
         // Both branches must agree at U == kink, so the upper branch starts from this value.
-        RATE_AT_KINK = baseRate + FixedPointMathLib.fullMulDiv(slopeLow, kink, RATE_SCALE);
+        RATE_AT_KINK = baseRate + FixedPointMathLib.fullMulDivUp(slopeLow, kink, RATE_SCALE);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -90,9 +92,9 @@ contract InterestRateModel is IInterestRateModel {
         // many orders of magnitude beyond any constructible state. This matches the standard
         // approach (Aave does not clamp either). See Guide 5, Section 3.2.
         if (utilization <= KINK) {
-            return BASE_RATE + FixedPointMathLib.fullMulDiv(SLOPE_LOW, utilization, RATE_SCALE);
+            return BASE_RATE + FixedPointMathLib.fullMulDivUp(SLOPE_LOW, utilization, RATE_SCALE);
         }
-        return RATE_AT_KINK + FixedPointMathLib.fullMulDiv(SLOPE_HIGH, utilization - KINK, RATE_SCALE);
+        return RATE_AT_KINK + FixedPointMathLib.fullMulDivUp(SLOPE_HIGH, utilization - KINK, RATE_SCALE);
     }
 
     /// @inheritdoc IInterestRateModel

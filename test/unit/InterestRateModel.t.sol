@@ -122,17 +122,18 @@ contract InterestRateModelTest is Test {
         assertLe(justAbove - atKink, SLOPE_HIGH, "discontinuity at the kink");
     }
 
-    /// @dev Each branch floors. Below the kink, 1,585,489,599 * (0.5e18 + 1) / 1e18 = 792,744,799.5...
-    ///      Above it, RATE_AT_KINK = 1,585,489,599 * 0.8 = 1,268,391,679.2 floors to 1,268,391,679 and
-    ///      31,709,791,983 * (0.1e18 + 1) / 1e18 = 3,170,979,198.3... floors to 3,170,979,198.
-    function test_borrowRate_floorsOnBothBranches() public view {
-        assertEq(irm.getBorrowRate(0.5e18 + 1), 792_744_799, "lower branch did not floor");
-        assertEq(irm.getBorrowRate(0.9e18 + 1), 1_268_391_679 + 3_170_979_198, "upper branch did not floor");
+    /// @dev Each branch ceils. Below the kink, 1,585,489,599 * (0.5e18 + 1) / 1e18 = 792,744,799.5...
+    ///      ceils to 792,744,800. Above it, RATE_AT_KINK = 1,585,489,599 * 0.8 = 1,268,391,679.2 ceils to
+    ///      1,268,391,680 and 31,709,791,983 * (0.1e18 + 1) / 1e18 = 3,170,979,198.3... ceils to
+    ///      3,170,979,199.
+    function test_borrowRate_ceilsOnBothBranches() public view {
+        assertEq(irm.getBorrowRate(0.5e18 + 1), 792_744_800, "lower branch did not ceil");
+        assertEq(irm.getBorrowRate(0.9e18 + 1), 1_268_391_680 + 3_170_979_199, "upper branch did not ceil");
     }
 
-    /// @dev The upper branch is anchored on the lower branch's value at the kink.
+    /// @dev The upper branch is anchored on the lower branch's value at the kink, ceiled.
     function test_continuity_upperBranchStartsFromTheKinkRate() public view {
-        uint256 expectedAtKink = (SLOPE_LOW * KINK) / RATE_SCALE;
+        uint256 expectedAtKink = (SLOPE_LOW * KINK + RATE_SCALE - 1) / RATE_SCALE;
         assertEq(irm.getBorrowRate(KINK), expectedAtKink, "kink rate mismatch");
     }
 
