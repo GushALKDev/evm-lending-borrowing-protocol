@@ -1,7 +1,7 @@
 # Fuzz Tests
 
 **Section:** [Testing Documentation](./README.md)
-**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (7) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (3) · [`ValuationRounding.t.sol`](../../test/fuzz/ValuationRounding.t.sol) (11)
+**Suites:** [`ConversionRounding.t.sol`](../../test/fuzz/ConversionRounding.t.sol) (19) · [`InterestRateModel.t.sol`](../../test/fuzz/InterestRateModel.t.sol) (7) · [`IndexPrecision.t.sol`](../../test/fuzz/IndexPrecision.t.sol) (4) · [`QuoteRounding.t.sol`](../../test/fuzz/QuoteRounding.t.sol) (5) · [`ValuationRounding.t.sol`](../../test/fuzz/ValuationRounding.t.sol) (11)
 **Phases:** 1-2, 8
 **Prev:** [Unit: Interest Rate Model](./04-unit-rate-model.md) · **Next:** [Mutation Checks](./06-mutation-checks.md)
 
@@ -90,15 +90,17 @@ The executable justification for the `1e15` index scale over a RAY (1e27) altern
 
 ---
 
-## 4. `QuoteRounding.t.sol` (3 tests)
+## 4. `QuoteRounding.t.sol` (5 tests: 3 fuzzed, 2 deterministic)
 
-The storefront quote (`quoteCollateral`) is the third rounding surface after conversion and rate math (Roadmap 8.5). Every division floors, so the buyer never receives more collateral than the ask supports ([Guide 2, Section 9](../02-mathematics.md)). Round-trip coverage in [`AbsorbLiquidation.t.sol`](../../test/fuzz/AbsorbLiquidation.t.sol) can survive a flipped floor → ceil; these pin the quote against a locally computed exact value instead. The storefront and liquidation factors are fuzzed field by field (within the constructor's INV-13 coverage bound) so the discount and askPrice divisions land on non-exact quotients where the direction is observable.
+The storefront quote (`quoteCollateral`) is the third rounding surface after conversion and rate math (Roadmap 8.5). Each division rounds toward the protocol: the discount floors (a smaller discount), the ask ceils (a higher ask), and the quote floors, so the buyer never receives more collateral than the ask supports ([Guide 2, Section 9](../02-mathematics.md#9-buycollateral-pricing)). Round-trip coverage in [`AbsorbLiquidation.t.sol`](../../test/fuzz/AbsorbLiquidation.t.sol) can survive a flipped floor → ceil; these pin the quote against a locally computed exact value instead. The storefront and liquidation factors are fuzzed field by field (within the constructor's INV-13 coverage bound) so the discount and askPrice divisions land on non-exact quotients where the direction is observable.
 
 | Test                                                                                     | Asserts                                                                                     |
 | :------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------- |
-| [`testFuzz_quoteCollateral_floorsExactly`](../../test/fuzz/QuoteRounding.t.sol#L74)         | Equals the exact truncated quote across the whole price and factor domain; a flipped floor → ceil fails by one wei. |
-| [`testFuzz_quoteCollateral_isMonotone`](../../test/fuzz/QuoteRounding.t.sol#L101)           | A larger base payment never quotes strictly less collateral: no non-monotone region.        |
-| [`testFuzz_askPrice_neverAboveSpot`](../../test/fuzz/QuoteRounding.t.sol#L119)              | The discount can only lower the ask, so a discounted market yields at least as much collateral per base as the undiscounted spot. |
+| [`testFuzz_quoteCollateral_matchesDirectedRounding`](../../test/fuzz/QuoteRounding.t.sol#L84)         | Equals the quote computed leg by leg in plain integer arithmetic (discount floored, ask ceiled, quote floored) across the price and factor domain. Half the runs price the collateral from 1 wei to 1,000 USD, where one wei of ask changes the quote, so a flipped direction on any leg fails. |
+| [`test_quoteCollateral_roundsAskUp`](../../test/fuzz/QuoteRounding.t.sol#L115)         | A 1 USD + 1 wei collateral at the reference factors: the ask `965e15 + 0.965` ceils to `965e15 + 1`, and 1,000 USDC quotes `1,036.269430051813470428e18`, 1,074 wei less than the floored ask would give. |
+| [`test_quoteCollateral_askIsNeverZero`](../../test/fuzz/QuoteRounding.t.sol#L125)         | At a price of 1 wei the floored ask would be 0 and the quote would revert dividing by zero; the ceiled ask is 1, so 1 USDC quotes `1e36`. |
+| [`testFuzz_quoteCollateral_isMonotone`](../../test/fuzz/QuoteRounding.t.sol#L134)           | A larger base payment never quotes strictly less collateral: no non-monotone region.        |
+| [`testFuzz_askPrice_neverAboveSpot`](../../test/fuzz/QuoteRounding.t.sol#L152)              | The discount can only lower the ask, so a discounted market yields at least as much collateral per base as the undiscounted spot. |
 
 ---
 

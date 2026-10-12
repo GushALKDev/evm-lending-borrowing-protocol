@@ -772,8 +772,10 @@ contract LendingMarket is ILendingMarket, Ownable2Step, ReentrancyGuard {
         uint256 discount = FixedPointMathLib.mulDiv(
             config.storeFrontPriceFactor, FACTOR_SCALE - config.liquidationFactor, FACTOR_SCALE
         );
-        // askPrice = price * (1 - discount), floored: the buyer pays no less than this per unit.
-        uint256 askPrice = FixedPointMathLib.mulDiv(price, FACTOR_SCALE - discount, FACTOR_SCALE);
+        // askPrice = price * (1 - discount), ceiled: it divides the quote, so a higher ask gives the
+        // buyer less collateral. Never zero: the oracle price is strictly positive and
+        // FACTOR_SCALE - discount >= liquidationFactor > 0.
+        uint256 askPrice = FixedPointMathLib.mulDivUp(price, FACTOR_SCALE - discount, FACTOR_SCALE);
 
         // quote = baseAmount * basePrice * collateralScale / (BASE_SCALE * askPrice), floored: the
         // buyer receives no more collateral than the ask supports.
