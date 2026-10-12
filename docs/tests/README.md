@@ -33,7 +33,7 @@
 
 ## Current Status
 
-**350 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis (Slither: 0 findings; Aderyn: 12 detector categories flagged, all triaged in [Static Analysis](./14-static-analysis.md), 4 false positives and 8 intended design, style, or accepted gas choices, none a vulnerability), coverage above 95% on every contract, an exact-value test on every rounding site, each checked against its flipped mutant, oracle confidence and deviation checks compared exactly, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
+**352 tests, all green** (Phase 8 in progress: invariant suite covering INV-1 to INV-11 plus INV-14, the per-operation reserve table, repay always available under `PAUSE_SUPPLY`, no new risk under `PAUSE_BORROW`, and a revert-reason allowlist, oracle failure modes driven through the market's own entry points, refunds that ignore forced ETH, fork tests against real Ethereum mainnet dependencies, static analysis (Slither: 0 findings; Aderyn: 12 detector categories flagged, all triaged in [Static Analysis](./14-static-analysis.md), 4 false positives and 8 intended design, style, or accepted gas choices, none a vulnerability), coverage above 95% on every contract, an exact-value test on every rounding site, each checked against its flipped mutant, oracle confidence and deviation checks compared exactly, the full local lifecycle plus a deploy-script rehearsal, and absorb/buyCollateral through the real oracle's fee path; INV-1 caught a self-transfer minting bug).
 
 | Suite                                                                | Layer | Tests | Phase |
 | :------------------------------------------------------------------- | :---- | ----: | :---- |
@@ -52,7 +52,7 @@
 | [`IndexPrecisionTest`](../../test/fuzz/IndexPrecision.t.sol)          | Fuzz  |     4 | 1     |
 | [`PythChainlinkOracleFuzzTest`](../../test/fuzz/PythChainlinkOracle.t.sol) | Fuzz | 4 | 5     |
 | [`AbsorbLiquidationFuzzTest`](../../test/fuzz/AbsorbLiquidation.t.sol) | Fuzz | 2 | 6     |
-| [`QuoteRoundingTest`](../../test/fuzz/QuoteRounding.t.sol)            | Fuzz  |     3 | 8     |
+| [`QuoteRoundingTest`](../../test/fuzz/QuoteRounding.t.sol)            | Fuzz  |     5 | 8     |
 | [`ValuationRoundingTest`](../../test/fuzz/ValuationRounding.t.sol)    | Fuzz  |    11 | 8     |
 | [`OracleMarketBorrowTest`](../../test/integration/OracleMarketBorrow.t.sol) | Integration | 2 | 5 |
 | [`OracleMarketLiquidationTest`](../../test/integration/OracleMarketLiquidation.t.sol) | Integration | 4 | 8 |
@@ -62,18 +62,18 @@
 | [`DeployScriptTest`](../../test/integration/DeployScript.t.sol)       | Integration | 1 | 8 |
 | [`InvariantsTest`](../../test/invariant/Invariants.t.sol)             | Invariant | 17 | 8 |
 | [`ForkLifecycleTest`](../../test/fork/ForkLifecycle.t.sol)            | Fork | 3 | 8 |
-| **Total**                                                            |       | **350** |     |
+| **Total**                                                            |       | **352** |     |
 
 | Layer (directory) | Tests |
 | :---------------- | ----: |
 | Unit (`test/unit`) | 242 |
-| Fuzz (`test/fuzz`) | 56 |
+| Fuzz (`test/fuzz`) | 58 |
 | Integration (`test/integration`) | 32 |
 | Invariant (`test/invariant`) | 17 |
 | Fork (`test/fork`) | 3 |
-| **Total** | **350** |
+| **Total** | **352** |
 
-The fuzz layer has 56 tests. 49 of them take fuzzed parameters and run 1,000 times each under the default profile; the other 7 are deterministic and run once: `test_indexScale_assumesSixDecimalBase` and `test_indexScale_reportErrorAcrossPositionSizes` in `IndexPrecision.t.sol`, and the five fixed-remainder cases in `ValuationRounding.t.sol` (`test_debtUSD_roundsUp`, `test_borrowCapacity_roundsDown`, `test_liquidationCapacity_roundsDown`, `test_seizeCollateral_roundsDown`, `test_absorb_creditBaseRoundsDown`). No test outside `test/fuzz` takes fuzzed parameters.
+The fuzz layer has 58 tests. 49 of them take fuzzed parameters and run 1,000 times each under the default profile; the other 9 are deterministic and run once: `test_indexScale_assumesSixDecimalBase` and `test_indexScale_reportErrorAcrossPositionSizes` in `IndexPrecision.t.sol`, `test_quoteCollateral_roundsAskUp` and `test_quoteCollateral_askIsNeverZero` in `QuoteRounding.t.sol`, and the five fixed-remainder cases in `ValuationRounding.t.sol` (`test_debtUSD_roundsUp`, `test_borrowCapacity_roundsDown`, `test_liquidationCapacity_roundsDown`, `test_seizeCollateral_roundsDown`, `test_absorb_creditBaseRoundsDown`). No test outside `test/fuzz` takes fuzzed parameters.
 
 | Fuzz suite | Tests | Fuzzed (1,000 runs each) | Deterministic (1 run) | Fuzz runs |
 | :--------- | ----: | -----------------------: | --------------------: | --------: |
@@ -82,10 +82,10 @@ The fuzz layer has 56 tests. 49 of them take fuzzed parameters and run 1,000 tim
 | `BorrowCapacityFuzzTest` | 6 | 6 | 0 | 6,000 |
 | `IndexPrecisionTest` | 4 | 2 | 2 | 2,000 |
 | `PythChainlinkOracleFuzzTest` | 4 | 4 | 0 | 4,000 |
-| `QuoteRoundingTest` | 3 | 3 | 0 | 3,000 |
+| `QuoteRoundingTest` | 5 | 3 | 2 | 3,000 |
 | `AbsorbLiquidationFuzzTest` | 2 | 2 | 0 | 2,000 |
 | `ValuationRoundingTest` | 11 | 6 | 5 | 6,000 |
-| **Total** | **56** | **49** | **7** | **49,000** |
+| **Total** | **58** | **49** | **9** | **49,000** |
 
 Each of the 17 invariants runs 1,000 sequences of 100 calls (100,000 calls each, 1,700,000 in total). The fork suite runs against the pinned mainnet block when `FORK_RPC_URL` is set and passes as a no-op otherwise; the counts above are the same in both modes.
 
