@@ -22,7 +22,7 @@
 
 ---
 
-> **Precision rules used throughout:** multiply before dividing; every division states its rounding direction (`floor` or `ceil`); every rounding direction favors the protocol. `floor(x)` is Solidity's default truncating division, `ceil(x) = floor((numerator + denominator - 1) / denominator)`.
+> **Precision rules used throughout:** multiply before dividing; every division states its rounding direction (`floor` or `ceil`); every rounding direction favors the protocol, except the two Section 10 names (utilization and the Pyth scale-down). `floor(x)` is Solidity's default truncating division, `ceil(x) = floor((numerator + denominator - 1) / denominator)`.
 
 ---
 
@@ -152,10 +152,10 @@ One kinked borrow curve, implemented in the immutable `InterestRateModel.sol` ([
 ```
 getBorrowRate(U):
     if U <= kink:
-        r = baseRate + floor( slopeLow * U / 1e18 )
+        r = baseRate + ceil( slopeLow * U / 1e18 )
     else:
-        r = baseRate + floor( slopeLow * kink / 1e18 )
-                     + floor( slopeHigh * (U - kink) / 1e18 )
+        r = baseRate + ceil( slopeLow * kink / 1e18 )
+                     + ceil( slopeHigh * (U - kink) / 1e18 )
 ```
 
 ```
@@ -163,7 +163,7 @@ getSupplyRate(U):
     s = floor( floor( r * U / 1e18 ) * (1e18 - RF) / 1e18 )
 ```
 
-Every division floors. Flooring `s` only lowers what suppliers receive, which Section 6 shows is reserve-safe. The curve is continuous at the kink (both branches agree at `U == kink`) and monotone in `U` (all slopes non-negative).
+The borrow rate ceils, so borrowers pay the rounding unit; the supply rate floors, so suppliers lose it, and it is computed from that same ceiled `r`. Section 6 shows this is reserve-safe. The curve is continuous at the kink (both branches return `baseRate + ceil(slopeLow * kink / 1e18)` at `U == kink`) and monotone in `U` (all slopes non-negative, and ceiling preserves order).
 
 ### Reference parameterization (annualized for readability)
 
@@ -200,7 +200,7 @@ supplierInterest = totalSupplyPV * s * dt
 
 ### Integer-valued theorem (what the code guarantees)
 
-Fix one accrual. Let `r` and `s` be the integer rates actually returned (computed from the floored `U`), and let `dSupplyPV` and `dBorrowPV` be the changes in present-value totals caused by the index updates.
+Fix one accrual. Let `r` and `s` be the integer rates actually returned (computed from the floored `U`), and let `dSupplyPV` and `dBorrowPV` be the changes in present-value totals caused by the index updates. `r` is the ceiled borrow rate, and `s` is computed from that same `r` (`getSupplyRate` calls `getBorrowRate` on the same `U`), so `r` is also the rate the borrow index uses. Nothing below depends on the direction `r` was rounded in; it only needs both sides to see the same integer `r`.
 
 ```
 Credited to suppliers (all floors):
@@ -377,13 +377,13 @@ Seized collateral is sold to anyone for base at a discount to the mid oracle pri
 ```
 discount = floor( storeFrontPriceFactor * (FACTOR_SCALE - liquidationFactor) / FACTOR_SCALE )   // bps, floor
 
-askPriceUSD = floor( price * (FACTOR_SCALE - discount) / FACTOR_SCALE )                          // floor
+askPriceUSD = ceil( price * (FACTOR_SCALE - discount) / FACTOR_SCALE )                           // ceil
 
 quote = floor( baseAmount * priceBase * collateralScale / (BASE_SCALE * askPriceUSD) )           // collateral out, floor
 require quote >= minAmount                                                                        // buyer slippage guard
 ```
 
-Flooring `discount` shrinks the discount and flooring `quote` gives the buyer less collateral: both favor the protocol.
+Flooring `discount` shrinks the discount, ceiling `askPriceUSD` raises the price per unit, and flooring `quote` gives the buyer less collateral: all three favor the protocol. The ceiled ask is never zero for a positive price, since `FACTOR_SCALE - discount >= liquidationFactor > 0`.
 
 ### Round-trip bound (absorb then sell, stable prices)
 
@@ -393,6 +393,8 @@ Because `storeFrontPriceFactor <= FACTOR_SCALE`:
 discount <= (1 - liquidationFactor)   =>   (1 - discount) >= liquidationFactor
 saleProceeds = seizeValue * (1 - discount) >= seizeValue * LF = creditValue
 ```
+
+The ceiled ask is at least the real-valued `price * (1 - discount)`, so it only raises the base paid per unit of collateral: the rounding makes this bound stronger, not weaker.
 
 - **Surplus/exact case:** reserves fell by `creditBase` at absorb; selling all collateral returns `>= creditBase`. The round trip is reserve-non-negative, and the protocol nets the penalty minus the discount: `seizeValue * (1 - LF) * (1 - storeFrontPriceFactor)` plus rounding dust.
 - **Shortfall case:** reserves fell by `debtPV > creditBase`; proceeds are `>= creditBase` but may not reach `debtPV`. The residual loss is bounded by the already-recognized bad debt: `debtPV - proceeds <= badDebt`.
@@ -426,16 +428,16 @@ Single rule: **when the protocol and an account are on opposite sides of a divis
 | Supply principal burned on withdrawal      | ceil             | Supplier             |
 | Debt principal added on borrow (magnitude) | ceil             | Borrower             |
 | Debt principal after repay (magnitude)     | ceil             | Borrower             |
-| Utilization                                | floor            | Suppliers (rate side, reserve-safe per Section 6) |
+| Utilization                                | floor            | Suppliers on the supply rate; borrowers gain at most one unit on the borrow rate (for slopes below `1e18`). The one floor on a borrow-driven quantity: Section 6 needs `s` computed from a `U` no higher than the real one |
 | `getSupplyRate` (every step)               | floor            | Suppliers            |
-| `getBorrowRate` (every step, including the precomputed rate at the kink) | floor | Suppliers and reserves: borrowers are charged less (see below) |
+| `getBorrowRate` (both branches, and the precomputed rate at the kink) | ceil | Borrower |
 | Collateral value in borrow capacity        | floor + `price - conf` | Borrower       |
 | Collateral value in liquidation capacity   | floor + `price + conf` | Borrower (the floor; the `+ conf` edge favors the borrower by design, Section 7) |
 | Debt value in health checks                | ceil + `price + conf`  | Borrower       |
 | Seize credit at absorb (`creditValueUSD`, then `creditBase`) | floor | Absorbed account |
 | Seize value in the `AbsorbCollateral` event | floor (reporting only) | None |
 | `buyCollateral` discount                   | floor            | Buyer                |
-| `buyCollateral` ask price                  | floor            | Reserves: a lower ask quotes the buyer more collateral (see below) |
+| `buyCollateral` ask price                  | ceil             | Buyer                |
 | `buyCollateral` quote (collateral out)     | floor            | Buyer                |
 | Oracle confidence check (`conf` vs `price`) | compared by cross-multiplication, no rounding | None |
 | Oracle deviation check (`\|pyth - anchor\|` vs `anchor`) | compared by cross-multiplication, no rounding | None |
@@ -448,7 +450,7 @@ Consequences worth stating:
 - Rounding dust accumulates in reserves (Section 6 table); it is never claimable by any account.
 - Directional rounding, not magnitude, is the invariant: fuzz tests assert direction on every operation, not dust size ([Guide 6, Testing Plan](./06-security.md#7-testing-plan)).
 - With 6-decimal USDC one wei of rounding is `1e-6` USDC; `minBorrow` (100 USDC) keeps positions far above the scale where dust is user-visible.
-- Three sites do not follow the single rule and are kept as implemented, each pinned by an exact-value test ([Mutation Checks](./tests/06-mutation-checks.md)). The `buyCollateral` ask price floors, which lowers the ask and so raises the quote before its own floor. `getBorrowRate` floors, so borrowers are charged up to one unit (`1e-18` per second) less; Section 6 still holds, since it is stated for the integer rate actually returned. Pyth normalization floors both price and confidence when `expo < -18`: a lower collateral price favors the protocol, but a lower base price lowers debt value and a narrower confidence band moves both band edges toward the borrower.
+- Two sites do not follow the single rule and are kept as implemented, each pinned by an exact-value test ([Mutation Checks](./tests/06-mutation-checks.md)). Utilization floors, so the borrow rate computed from it can be one unit lower than from the real utilization (for any slope below `1e18`); ceiling it instead would let `s` exceed `r * U_real * (1 - RF)`, the bound Section 6 relies on. Pyth normalization floors both price and confidence when `expo < -18`: a lower collateral price favors the protocol, but a lower base price lowers debt value and a narrower confidence band moves both band edges toward the borrower.
 
 ---
 

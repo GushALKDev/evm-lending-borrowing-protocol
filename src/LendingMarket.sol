@@ -20,8 +20,11 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
  *         inert supply-only collateral, index based interest accrual, and derived reserves. The
  *         market is itself the rebasing ERC20 claim on the base supply (lmUSDC).
  * @dev Rounding policy (Guide 2, Section 10) is load bearing: every division where the protocol and
- *      an account sit on opposite sides rounds toward the protocol. Supply side rounds down, borrow
- *      side rounds up, without exception.
+ *      an account sit on opposite sides rounds toward the protocol. What an account holds or receives
+ *      rounds down (balances, collateral value, absorb credit, collateral bought); what it owes or pays
+ *      rounds up (debt, the ask price). The one exception is utilization, which floors: Guide 2,
+ *      Section 6 needs the supply rate computed from a utilization no higher than the real one, so the
+ *      borrow rate read from the same value can be one unit lower (for any slope below 1e18).
  *
  *      Every state-changing function accrues first, then follows checks-effects-interactions with a
  *      nonReentrant guard on the token-moving paths.
