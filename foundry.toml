@@ -13,7 +13,11 @@ ffi = false
 
 # Read-only access to the cached Pyth VAA fixtures the fork test replays. Scoped to that one
 # directory; ffi stays off, so the test stays deterministic (no live Hermes fetch at run time).
-fs_permissions = [{access = "read", path = "./test/fork/fixtures"}]
+# Read-write access to the deployment files the testnet scripts write and read for the demo app.
+fs_permissions = [
+    {access = "read", path = "./test/fork/fixtures"},
+    {access = "read-write", path = "./app/src/config/deployments"},
+]
 
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
@@ -29,6 +33,11 @@ runs = 1000
 runs = 1000
 depth = 100
 fail_on_revert = false
+
+# Testnet tooling (script/testnet): its own suite, so the protocol figures above stay unchanged.
+# FOUNDRY_PROFILE=testnet forge test
+[profile.testnet]
+test = "script/testnet/test"
 
 # Faster local iteration: same tests, fewer randomized runs.
 [profile.lite.fuzz]
