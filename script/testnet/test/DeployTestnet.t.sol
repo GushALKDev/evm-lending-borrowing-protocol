@@ -106,10 +106,10 @@ contract DeployTestnetTest is Test {
         // Liquidity sits with the faucet contract, which has no way to withdraw it.
         assertEq(market.balanceOf(address(faucet)), 500_000e6, "seed liquidity owned by the faucet");
         assertEq(market.totalSupply(), 500_000e6, "seeded supply");
-        // The seed borrow opens the demo at 50% utilization.
-        assertEq(market.totalBorrow(), 250_000e6, "seed borrow");
-        assertEq(market.getUtilization(), 0.5e18, "50% utilization");
-        assertEq(IERC20(address(faucet.USDC())).balanceOf(address(market)), 250_000e6, "cash left to borrow");
+        // The seed borrow opens the demo at 78% utilization.
+        assertEq(market.totalBorrow(), 390_000e6, "seed borrow");
+        assertEq(market.getUtilization(), 0.78e18, "78% utilization");
+        assertEq(IERC20(address(faucet.USDC())).balanceOf(address(market)), 110_000e6, "cash left to borrow");
 
         (uint256 ethPrice,) = oracle.getPrice(address(faucet.WETH()));
         assertEq(ethPrice, 4_000e18, "mirrored ETH price");

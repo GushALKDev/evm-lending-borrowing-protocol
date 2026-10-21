@@ -83,14 +83,15 @@ parameters as `script/Deploy.s.sol`, and supplies 500,000 USDC on behalf of the 
 withdraw it. On a broadcast it writes `app/src/config/deployments/84532.json`, which the app reads: commit that
 file. A run without `--broadcast` leaves the file alone.
 
-Then open the seed borrow, with the same key, so the demo starts at about 50% utilization instead of idle:
+Then open the seed borrow, with the same key, so the demo starts at 78% utilization, just under the rate
+model's 80% kink, instead of idle:
 
 ```bash
 forge script script/testnet/SeedBorrow.s.sol \
   --rpc-url https://sepolia.base.org --account demo-deployer --broadcast
 ```
 
-It posts 200 WETH and borrows 250,000 USDC. It is a separate run because the borrow carries a price that the
+It posts 500 WETH and borrows 390,000 USDC. It is a separate run because the borrow carries a price that the
 oracle rejects once it is older than 60 seconds; if a slow RPC makes it revert with `StalePrice`, run it again.
 
 To verify the contracts on BaseScan, add `--verify --etherscan-api-key <key>` (an Etherscan API V2 key covers
