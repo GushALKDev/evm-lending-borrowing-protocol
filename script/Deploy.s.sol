@@ -31,7 +31,7 @@ contract Deploy is Script {
         address pyth;
     }
 
-    function run() external returns (LendingMarket market, InterestRateModel irm, PythChainlinkOracle oracle) {
+    function run() external virtual returns (LendingMarket market, InterestRateModel irm, PythChainlinkOracle oracle) {
         Wiring memory w = _wiring();
 
         vm.startBroadcast();
@@ -108,9 +108,19 @@ contract Deploy is Script {
             targetReserves: 1_000_000e6
         });
 
-        ILendingMarket.CollateralConfig[] memory collaterals = new ILendingMarket.CollateralConfig[](2);
+        return new LendingMarket(cfg, _collateralConfigs(w.weth, w.wbtc));
+    }
+
+    /// @dev Reference risk parameters (Guide 2, Section 11) for the WETH and wBTC collaterals, in
+    ///      assetsIn bit-offset order. Shared with the testnet script so both deploy the same market.
+    function _collateralConfigs(address weth, address wbtc)
+        internal
+        pure
+        returns (ILendingMarket.CollateralConfig[] memory collaterals)
+    {
+        collaterals = new ILendingMarket.CollateralConfig[](2);
         collaterals[0] = ILendingMarket.CollateralConfig({
-            asset: w.weth,
+            asset: weth,
             borrowCollateralFactor: 8_000,
             liquidateCollateralFactor: 8_500,
             liquidationFactor: 9_300,
@@ -119,7 +129,7 @@ contract Deploy is Script {
             decimals: 18
         });
         collaterals[1] = ILendingMarket.CollateralConfig({
-            asset: w.wbtc,
+            asset: wbtc,
             borrowCollateralFactor: 7_500,
             liquidateCollateralFactor: 8_000,
             liquidationFactor: 9_000,
@@ -127,7 +137,5 @@ contract Deploy is Script {
             supplyCap: 500e8,
             decimals: 8
         });
-
-        return new LendingMarket(cfg, collaterals);
     }
 }
