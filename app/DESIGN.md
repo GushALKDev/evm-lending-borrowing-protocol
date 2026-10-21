@@ -40,14 +40,21 @@ from industrial control systems. Sentence case throughout, no all-caps labels.
 ## Layout
 
 ```
-header   wordmark, network, test tokens, wallet
-notice   one line: testnet, not audited, where prices come from
-hero     headline + balance sheet + four rates
-grid     your position and actions (left, wider) | rates curve and collateral (right)
-section  liquidations: check an account, storefront, accounts with debt
-section  how it works (four mechanics + the oracle note)
+header        wordmark (links to the market page), network, pages, test tokens, wallet
+              pages: Market, Liquidations, How it works, on a second header row below 1024 px
+notice        one line: testnet, not audited, where prices come from
+
+/             hero: headline + balance sheet + four rates
+              grid: your position and actions (left, wider) | rates curve and collateral (right)
+/liquidations balance sheet, then check an account, storefront, accounts with debt
+/how-it-works four mechanics + the oracle note
+
 footer
 ```
+
+Each page has its own path, so a link can point straight at the liquidations or the oracle note. The
+balance sheet appears on the liquidations page too, since absorbs and storefront sales both change the reserves it
+shows.
 
 Left-aligned throughout. Two columns from 1024 px, one below.
 

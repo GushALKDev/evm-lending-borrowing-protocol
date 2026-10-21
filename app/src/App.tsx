@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AccountCard } from './components/Account'
 import { FaucetDialog } from './components/FaucetDialog'
 import { Hero } from './components/Hero'
@@ -9,6 +9,7 @@ import { Toasts } from './components/Toasts'
 import { ConnectDialog } from './components/Wallet'
 import { chain, deployment, links } from './config/chain'
 import { useModel } from './hooks/useModel'
+import { scrollToTarget, useRoute } from './hooks/useRoute'
 
 function NotDeployed() {
   return (
@@ -26,6 +27,10 @@ function NotDeployed() {
 
 function Market() {
   const { model, error } = useModel()
+  const { page, url } = useRoute()
+  const ready = model !== null
+  // A fragment's target only exists once the market has rendered, so a direct link waits for the first read.
+  useEffect(scrollToTarget, [url, ready])
   const [connectOpen, setConnectOpen] = useState(false)
   const [faucetOpen, setFaucetOpen] = useState(false)
   const openConnect = () => {
@@ -35,22 +40,26 @@ function Market() {
 
   return (
     <>
-      <Header onConnect={openConnect} onFaucet={() => setFaucetOpen(true)} />
+      <Header page={page} onConnect={openConnect} onFaucet={() => setFaucetOpen(true)} />
       <Notice />
       {model ? (
-        <main id="top">
-          <Hero model={model} />
-          <div className="wrap main-grid">
-            <div className="stack">
-              <AccountCard model={model} onConnect={openConnect} onFaucet={() => setFaucetOpen(true)} />
-            </div>
-            <div className="stack">
-              <RatesCard model={model} />
-              <CollateralCard model={model} />
-            </div>
-          </div>
-          <Liquidations model={model} />
-          <HowItWorks model={model} />
+        <main>
+          {page === 'market' ? (
+            <>
+              <Hero model={model} />
+              <div className="wrap main-grid">
+                <div className="stack">
+                  <AccountCard model={model} onConnect={openConnect} onFaucet={() => setFaucetOpen(true)} />
+                </div>
+                <div className="stack">
+                  <RatesCard model={model} />
+                  <CollateralCard model={model} />
+                </div>
+              </div>
+            </>
+          ) : null}
+          {page === 'liquidations' ? <Liquidations model={model} /> : null}
+          {page === 'how' ? <HowItWorks model={model} /> : null}
         </main>
       ) : (
         <main className="wrap hero">

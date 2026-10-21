@@ -1,18 +1,42 @@
+import type { ComponentProps } from 'react'
 import { chain, explorerAddress, links } from '../config/chain'
+import { navigate, pages, type Page } from '../hooks/useRoute'
 import { formatBps } from '../lib/format'
 import type { MarketModel } from '../lib/model'
 import { Mark } from './icons'
 import { WalletButton } from './Wallet'
 
-export function Header({ onConnect, onFaucet }: { onConnect: () => void; onFaucet: () => void }) {
+/** Link to a page of this app: a plain click switches page without a reload, a modified click keeps the browser's behavior. */
+export function Link({ href, ...rest }: ComponentProps<'a'> & { href: string }) {
+  return (
+    <a
+      href={href}
+      {...rest}
+      onClick={(e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+        e.preventDefault()
+        navigate(href)
+      }}
+    />
+  )
+}
+
+export function Header({ page, onConnect, onFaucet }: { page: Page; onConnect: () => void; onFaucet: () => void }) {
   return (
     <header className="site-header">
       <div className="wrap">
-        <a className="wordmark" href="#top">
+        <Link className="wordmark" href="/">
           <Mark />
           Lending Market
-        </a>
+        </Link>
         <span className="network">{chain.name}</span>
+        <nav className="page-nav" aria-label="Pages">
+          {pages.map((p) => (
+            <Link key={p.page} className="page-link" href={p.path} aria-current={p.page === page ? 'page' : undefined}>
+              {p.label}
+            </Link>
+          ))}
+        </nav>
         <div className="header-actions">
           <button className="btn btn-faucet" onClick={onFaucet} aria-label="Get test tokens">
             <span>Test tokens</span>
@@ -32,7 +56,7 @@ export function Notice() {
     <div className="notice">
       <div className="wrap">
         Testnet proof of concept with tokens that have no value. Not audited. Prices are Chainlink's, pushed through a Pyth
-        stand-in: <a href="#oracle">how and why</a>.
+        stand-in: <Link href="/how-it-works#oracle">how and why</Link>.
       </div>
     </div>
   )
@@ -46,7 +70,7 @@ export function HowItWorks({ model }: { model: MarketModel }) {
       <div className="wrap">
         <div className="section-head">
           <h2>How this market works</h2>
-          <p>Four design decisions shape everything above. Each one is written up in the repository's guides.</p>
+          <p>Four design decisions shape everything in this market. Each one is written up in the repository's guides.</p>
         </div>
         <div className="mechanics">
           <div className="mechanic">

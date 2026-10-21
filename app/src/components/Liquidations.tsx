@@ -10,7 +10,9 @@ import { PAUSE, absorbPreview, mulDivUp, quoteCollateral, storefrontDiscount, FA
 import { buildAccount, type AccountView, type MarketModel } from '../lib/model'
 import { wagmiConfig } from '../wagmi'
 import { Meter } from './Account'
+import { BalanceSheet } from './Hero'
 import { TokenIcon } from './icons'
+import { Link } from './Sections'
 
 async function readAccount(model: MarketModel, account: Address): Promise<AccountView> {
   const d = model.deployment
@@ -226,7 +228,7 @@ function Storefront({ model }: { model: MarketModel }) {
           <p>
             Prices here follow Chainlink, so an account usually becomes absorbable when the market moves or its interest
             builds up; a pushed price can also shift it, within the oracle's 3% band around Chainlink. The simulator
-            next to your position shows what an absorb would do.
+            under your position, on the <Link href="/">Market page</Link>, shows what an absorb would do.
           </p>
         </div>
       ) : (
@@ -413,6 +415,7 @@ export function Liquidations({ model }: { model: MarketModel }) {
             profit comes from.
           </p>
         </div>
+        <BalanceSheet model={model} />
         <div className="liq-grid">
           <CheckAccount model={model} target={target} setTarget={setTarget} />
           <Storefront model={model} />

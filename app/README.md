@@ -105,7 +105,8 @@ FOUNDRY_PROFILE=testnet forge test
 ## Deploy the app to Vercel
 
 1. In Vercel, add a new project from this GitHub repository.
-2. Set **Root Directory** to `app`. Vercel detects Vite; `vercel.json` sets the build command and output folder.
+2. Set **Root Directory** to `app`. Vercel detects Vite; `vercel.json` sets the build command, the output folder
+   and the rewrite that serves `index.html` for every page path (`/liquidations`, `/how-it-works`).
 3. Optional environment variable: `VITE_RPC_URL`, if the public Base Sepolia RPC rate limits the page. Any key in
    it is visible to visitors, so restrict it to the site's domain at the provider.
 4. Deploy. Every push to `main` redeploys.
@@ -119,7 +120,7 @@ src/
   abi/          generated from the Foundry build (npm run abi after forge build)
   config/       chain, links, and the deployment files written by the script
   lib/          market math, price update encoding, error messages, formatting
-  hooks/        chain reads, the derived model, transactions, toasts
+  hooks/        chain reads, the derived model, transactions, toasts, the current page
   components/   the interface
 scripts/
   local-chain.sh     local rehearsal of the testnet deployment

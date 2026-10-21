@@ -191,6 +191,34 @@ select {
   align-items: center;
 }
 
+.page-nav {
+  display: flex;
+  align-self: stretch;
+  gap: 24px;
+  margin-left: 12px;
+}
+
+.page-link {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-2);
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.page-link:hover {
+  color: var(--ink);
+}
+
+.page-link[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
 .notice {
   border-bottom: 1px solid var(--rule);
   font-size: 13.5px;
@@ -1020,6 +1048,14 @@ td .sub {
   align-items: start;
 }
 
+.section-head + .sheet {
+  margin-top: 0;
+}
+
+.sheet + .liq-grid {
+  margin-top: 20px;
+}
+
 .text-input {
   width: 100%;
   min-height: 44px;
@@ -1301,6 +1337,21 @@ td .sub {
 
 /* Responsive -------------------------------------------------------- */
 @media (max-width: 1023px) {
+  .site-header .wrap {
+    flex-wrap: wrap;
+    row-gap: 0;
+    padding-top: 12px;
+  }
+  .page-nav {
+    order: 1;
+    flex-basis: 100%;
+    margin: 4px 0 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .page-link {
+    padding: 10px 0 8px;
+  }
   .main-grid,
   .liq-grid {
     grid-template-columns: minmax(0, 1fr);
