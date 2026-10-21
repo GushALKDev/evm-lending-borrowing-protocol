@@ -59,7 +59,7 @@ function CheckAccount({ model, target, setTarget }: { model: MarketModel; target
     : null
   const status = acc ? statusOf(acc) : null
   const absorbPaused = (model.state.pauseFlags & PAUSE.ABSORB) !== 0
-  const preview = acc ? absorbPreview(acc.borrowed, model.basePrice, model.static.baseScale, acc.holdings) : null
+  const preview = acc ? absorbPreview(acc.borrowed, model.basePrice, model.static.baseScale, acc.holdings, model.state) : null
 
   const absorb = () =>
     run('Absorb account', 'Account absorbed', async () => {

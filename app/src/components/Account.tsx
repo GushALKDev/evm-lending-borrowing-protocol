@@ -14,6 +14,7 @@ import {
   maxDebtFor,
   mulDiv,
   scalePrice,
+  settle,
   type Health,
   type Holding,
 } from '../lib/market'
@@ -222,7 +223,7 @@ function useActionPlan(model: MarketModel, acc: AccountView, tab: Tab, assetInde
         max: wallet,
         maxLabel: `Wallet ${formatFixed(wallet, base.decimals, base.shown)} USDC`,
         approve: { token: base.address, current: acc.data.allowance.base, needed: a },
-        after: { balance: acc.balance + a, holdings: acc.holdings },
+        after: { balance: settle(acc.principal, a, model.state), holdings: acc.holdings },
         error: a > wallet ? 'More than your wallet balance.' : supplyPaused && borrowed === 0n ? 'Supplying is paused on the market.' : undefined,
         note: borrowed > 0n ? 'You are borrowing, so this repays your debt first and supplies anything beyond it.' : undefined,
         needsPrice: false,
@@ -242,7 +243,7 @@ function useActionPlan(model: MarketModel, acc: AccountView, tab: Tab, assetInde
         shown: base.shown,
         max: cashCap,
         maxLabel: `Supplied ${formatFixed(supplied, base.decimals, base.shown)} USDC`,
-        after: { balance: acc.balance - a, holdings: acc.holdings },
+        after: { balance: settle(acc.principal, -a, model.state), holdings: acc.holdings },
         error:
           supplied === 0n
             ? 'You have no USDC supplied. To take USDC out against collateral, use Borrow.'
@@ -268,7 +269,8 @@ function useActionPlan(model: MarketModel, acc: AccountView, tab: Tab, assetInde
       // landing block slightly shrinks the debt, so keep a cent above the minimum in that case.
       const minDebt = atChain > 0n ? st.minBorrow + st.baseScale / 100n : st.minBorrow
       const max = headroom < cashRoom ? headroom : cashRoom
-      const debtAfter = borrowed + a
+      const balanceAfter = settle(acc.principal, -(atChain + a), model.state)
+      const debtAfter = balanceAfter < 0n ? -balanceAfter : 0n
       const afterHealth = health(debtAfter, model.basePrice, st.baseScale, acc.holdings)
       let error: string | undefined
       if (acc.holdings.length === 0) error = 'Post WETH or wBTC as collateral first, in the Collateral tab.'
@@ -289,7 +291,7 @@ function useActionPlan(model: MarketModel, acc: AccountView, tab: Tab, assetInde
             : cashRoom < headroom
               ? `Capped by the ${formatFixed(cashRoom, base.decimals, base.shown)} USDC the market holds in cash right now.`
               : `Your borrowing capacity in USDC at the high edge of its price, less ${borrowed > 0n ? 'your debt and ' : ''}0.5% kept back in case interest or prices move before the borrow lands.`,
-        after: { balance: acc.balance - atChain - a, holdings: acc.holdings },
+        after: { balance: balanceAfter, holdings: acc.holdings },
         error,
         note:
           supplied > 0n
@@ -321,7 +323,7 @@ function useActionPlan(model: MarketModel, acc: AccountView, tab: Tab, assetInde
           // The full repay pulls the debt as accrued at execution: approve a little above today's figure.
           needed: repayAll ? (borrowed * 10_010n) / 10_000n + 1n : a,
         },
-        after: { balance: repayAll ? 0n : acc.balance + a, holdings: acc.holdings },
+        after: { balance: repayAll ? 0n : settle(acc.principal, a, model.state), holdings: acc.holdings },
         error:
           borrowed === 0n
             ? 'You have no debt to repay.'
@@ -621,7 +623,7 @@ function Simulator({ model, acc }: { model: MarketModel; acc: AccountView }) {
   const factor = 1 + move / 100
   const shocked = acc.holdings.map((h) => ({ ...h, price: scalePrice(h.price, factor) }))
   const h = health(acc.borrowed, model.basePrice, st.baseScale, shocked)
-  const preview = absorbPreview(acc.borrowed, model.basePrice, st.baseScale, shocked)
+  const preview = absorbPreview(acc.borrowed, model.basePrice, st.baseScale, shocked, model.state)
   const factors = acc.holdings
     .map((x) => {
       const info = model.collaterals.find((c) => c.info.params === x.params)!.info

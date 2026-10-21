@@ -111,6 +111,23 @@ export function presentValue(principal: bigint, s: MarketState): bigint {
   return principal >= 0n ? pvSupply(principal, s) : -pvBorrow(-principal, s)
 }
 
+export const principalSupply = (present: bigint, s: MarketState) => mulDiv(present, BASE_INDEX_SCALE, s.supplyIndex)
+export const principalBorrow = (present: bigint, s: MarketState) => mulDivUp(present, BASE_INDEX_SCALE, s.borrowIndex)
+
+/** LendingMarket._principalValue: the signed principal the market stores for a signed present value. */
+export function principalValue(present: bigint, s: MarketState): bigint {
+  return present >= 0n ? principalSupply(present, s) : -principalBorrow(-present, s)
+}
+
+/**
+ * The balance an account is left with when a call moves its present value by `delta`. The market stores
+ * the principal of the new balance and reads it back, so a supply can come back a wei short and a debt
+ * a wei over: a 15,000 USDC borrow reads as 15,000.000001.
+ */
+export function settle(principal: bigint, delta: bigint, s: MarketState): bigint {
+  return presentValue(principalValue(presentValue(principal, s) + delta, s), s)
+}
+
 /** LendingMarket.getReserves: cash + borrows - supply, signed. */
 export function reserves(cash: bigint, s: MarketState): bigint {
   return cash + totalBorrow(s) - totalSupply(s)
@@ -254,7 +271,7 @@ export interface AbsorbPreview {
 }
 
 /** LendingMarket.absorb settlement: collateral credited at liquidationFactor of its mid value. */
-export function absorbPreview(debtPV: bigint, base: Price, baseScale: bigint, holdings: Holding[]): AbsorbPreview {
+export function absorbPreview(debtPV: bigint, base: Price, baseScale: bigint, holdings: Holding[], s: MarketState): AbsorbPreview {
   let seizedUSD = 0n
   let creditUSD = 0n
   for (const h of holdings) {
@@ -269,7 +286,8 @@ export function absorbPreview(debtPV: bigint, base: Price, baseScale: bigint, ho
     creditBase,
     debtBase: debtPV,
     badDebt: creditBase < debtPV ? debtPV - creditBase : 0n,
-    surplus: creditBase > debtPV ? creditBase - debtPV : 0n,
+    // Credited as a supply principal, then read back.
+    surplus: creditBase > debtPV ? pvSupply(principalSupply(creditBase - debtPV, s), s) : 0n,
   }
 }
 

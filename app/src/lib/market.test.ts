@@ -6,13 +6,16 @@ import {
   absorbPreview,
   accrue,
   borrowRate,
+  debtUSD,
   health,
   maxCollateralWithdraw,
   maxDebtFor,
   mirroredPrice,
   mulDivUp,
   presentValue,
+  principalValue,
   quoteCollateral,
+  settle,
   storefrontDiscount,
   supplyRate,
   type Holding,
@@ -83,6 +86,34 @@ describe('accrual projection', () => {
   })
 })
 
+describe('principal round trip', () => {
+  // Both indexes as Base Sepolia stored them at block 48415134, where a 15,000 USDC borrow from zero
+  // left principal -14,999,952,883 and borrowBalanceOf 15,000,000,001.
+  const s: MarketState = {
+    supplyIndex: 1_000_002_205_104_499n,
+    borrowIndex: 1_000_003_141_174_507n,
+    lastAccrualTime: 1_792_598_556n,
+    pauseFlags: 0,
+    totalSupplyBase: 500_000_000_000n,
+    totalBorrowBase: 404_999_952_883n,
+  }
+
+  it('stores a borrow principal rounded up and reads the debt back a wei over', () => {
+    expect(principalValue(-15_000_000_000n, s)).toBe(-14_999_952_883n)
+    expect(settle(0n, -15_000_000_000n, s)).toBe(-15_000_000_001n)
+  })
+
+  it('stores a supply principal rounded down and reads the balance back a wei short', () => {
+    expect(principalValue(15_000_000_000n, s)).toBe(14_999_966_923n)
+    expect(settle(0n, 15_000_000_000n, s)).toBe(14_999_999_999n)
+  })
+
+  it('settles a repay that crosses into a supply on the supply side', () => {
+    // -15,000.000001 + 20,000 = 4,999.999999, stored as a supply principal and read back floored.
+    expect(settle(-14_999_952_883n, 20_000_000_000n, s)).toBe(4_999_999_998n)
+  })
+})
+
 describe('health', () => {
   const holdings: Holding[] = [{ params: weth, balance: 10n ** 18n, price: ethPrice }]
 
@@ -117,11 +148,35 @@ describe('health', () => {
 
 describe('absorb and storefront', () => {
   it('credits 93% of the mid value against the debt', () => {
-    const p = absorbPreview(3_500_000_000n, usdcPrice, 10n ** 6n, [{ params: weth, balance: 10n ** 18n, price: ethPrice }])
+    const s: MarketState = { supplyIndex: 10n ** 15n, borrowIndex: 10n ** 15n, lastAccrualTime: 0n, pauseFlags: 0, totalSupplyBase: 0n, totalBorrowBase: 0n }
+    const p = absorbPreview(3_500_000_000n, usdcPrice, 10n ** 6n, [{ params: weth, balance: 10n ** 18n, price: ethPrice }], s)
     expect(p.seizedUSD).toBe(4_000n * 10n ** 18n)
     expect(p.creditBase).toBe(3_720_000_000n)
     expect(p.surplus).toBe(220_000_000n)
     expect(p.badDebt).toBe(0n)
+  })
+
+  // With 8 decimal feeds and the deployed factors these divisions are always exact on chain, so the
+  // local parity suite cannot tell their rounding apart: these inputs leave a remainder on purpose.
+  it('rounds the debt value up', () => {
+    expect(debtUSD(3n, { price: 10n ** 18n + 1n, conf: 0n }, 10n ** 6n)).toBe(3n * 10n ** 12n + 1n)
+  })
+
+  it('floors the absorb credit before converting it to base', () => {
+    // 93% of 1,075,268,817,204 is 999,999,999,999.72: floored it stays under the 1e12 that one base unit
+    // costs at $1, so nothing is credited and the whole debt is bad debt.
+    const s: MarketState = { supplyIndex: 10n ** 15n, borrowIndex: 10n ** 15n, lastAccrualTime: 0n, pauseFlags: 0, totalSupplyBase: 0n, totalBorrowBase: 0n }
+    const holding = { params: { ...weth, decimals: 0 }, balance: 1n, price: { price: 1_075_268_817_204n, conf: 0n } }
+    const p = absorbPreview(5n, { price: 10n ** 18n, conf: 0n }, 10n ** 6n, [holding], s)
+    expect(p.creditUSD).toBe(999_999_999_999n)
+    expect(p.creditBase).toBe(0n)
+    expect(p.badDebt).toBe(5n)
+  })
+
+  it('rounds the storefront discount down and the ask up', () => {
+    expect(storefrontDiscount({ ...weth, storeFrontPriceFactor: 5_001n })).toBe(350n)
+    // ask = ceil((4,000e18 + 1) * 96.5%) = 3,860e18 + 1, so 3,860 USDC buys a wei less than 1 WETH.
+    expect(quoteCollateral(weth, { price: 4_000n * 10n ** 18n + 1n, conf: 0n }, usdcPrice, 10n ** 6n, 3_860_000_000n)).toBe(10n ** 18n - 1n)
   })
 
   it('sells at 3.5% below the oracle price', () => {
