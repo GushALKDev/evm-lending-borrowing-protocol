@@ -6,6 +6,8 @@ collateral, borrow and repay, absorb underwater accounts and buy seized collater
 
 Proof of concept, not audited. The tokens are testnet stand-ins with no value.
 
+Live: https://evm-lending-borrowing-protocol.vercel.app
+
 ## What it shows
 
 - **The balance sheet.** Cash plus borrows against supplier balances plus reserves. Reserves are derived in the
@@ -40,7 +42,7 @@ Requires Node 22 and, for a local chain, Foundry.
 ```bash
 cd app
 npm install
-npm run dev                  # reads Base Sepolia, once the market is deployed there
+npm run dev                  # reads the Base Sepolia deployment
 ```
 
 Against a local chain instead (anvil, three mock Chainlink feeds and a full deployment):

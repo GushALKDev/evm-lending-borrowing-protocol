@@ -10,7 +10,10 @@ A **single-market money market** in the style of Compound III (Comet): one borro
 > **Proof of concept. Not audited, and not deployed on any mainnet.** All code is written from scratch; Compound III is the architectural reference, and no code is copied or forked. Do not use in production.
 
 **Demo app:** a web interface in [`app/`](./app/README.md) runs the market on Base Sepolia with testnet tokens: supply, borrow, absorb and buy seized collateral, with previews computed by the contract's own math.
-<!-- Add the live link here once deployed on Vercel: **Live demo:** https://... -->
+
+**Live demo:** https://evm-lending-borrowing-protocol.vercel.app
+
+[![The demo app's market page, with the balance sheet read live from Base Sepolia](docs/images/demo-app.png)](https://evm-lending-borrowing-protocol.vercel.app)
 
 ---
 
