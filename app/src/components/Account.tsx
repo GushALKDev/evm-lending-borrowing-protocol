@@ -446,7 +446,7 @@ function Actions({ model, acc }: { model: MarketModel; acc: AccountView }) {
         return { address: d.market, abi: marketAbi, functionName, args: [args[0], args[1], update], value }
       }
       return { address: d.market, abi: marketAbi, functionName, args }
-    })
+    }, { afterApproval: needsApproval })
     if (ok) reset()
   }
 

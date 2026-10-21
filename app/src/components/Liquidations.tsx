@@ -195,7 +195,8 @@ function Storefront({ model }: { model: MarketModel }) {
 
   const buy = async () => {
     if (!amount || !address || !acc) return
-    if (acc.data.allowance.base < amount) {
+    const approving = acc.data.allowance.base < amount
+    if (approving) {
       const ok = await run('Approve USDC', 'USDC approved', () => ({
         address: d.base.address,
         abi: tokenAbi,
@@ -208,7 +209,7 @@ function Storefront({ model }: { model: MarketModel }) {
     const ok = await run(`Buy ${c.info.symbol}`, `${c.info.symbol} bought`, async () => {
       const { update, value } = await freshPriceUpdate(st.updateFee)
       return { address: d.market, abi: marketAbi, functionName: 'buyCollateral', args: [c.info.address, minOut, amount, address, update], value }
-    })
+    }, { afterApproval: approving })
     if (ok) setInput('')
   }
 
