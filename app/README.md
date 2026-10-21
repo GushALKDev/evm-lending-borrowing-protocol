@@ -117,6 +117,9 @@ The app runs as `lending-poc`, an assets-only Worker: there is no Worker script.
 `dist/` and holds the SPA fallback, which serves `index.html` for every page path (`/liquidations`,
 `/how-it-works`). `public/_headers` holds the cache and security headers; Vite copies it into `dist/`.
 
+The `og:image` and `og:url` tags in `index.html` carry the absolute workers.dev URL, since link preview crawlers
+do not resolve relative paths: change them when the app moves to its own domain.
+
 First deploy, from a terminal in `app/`:
 
 ```bash
