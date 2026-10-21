@@ -177,6 +177,8 @@ interface Plan {
   /** Maximum the user can enter, already capped by wallet, position and market limits */
   max: bigint
   maxLabel: string
+  /** Where the maximum comes from, when the label alone does not say */
+  maxHint?: string
   /** Value sent when the Max button was used and an exact sentinel applies (full repay) */
   sentinel?: bigint
   /** Allowance needed for the call, if it pulls tokens */
@@ -281,6 +283,12 @@ function useActionPlan(model: MarketModel, acc: AccountView, tab: Tab, assetInde
         shown: base.shown,
         max,
         maxLabel: `Up to ${formatFixed(max, base.decimals, base.shown)} USDC`,
+        maxHint:
+          acc.holdings.length === 0
+            ? undefined
+            : cashRoom < headroom
+              ? `Capped by the ${formatFixed(cashRoom, base.decimals, base.shown)} USDC the market holds in cash right now.`
+              : `Your borrowing capacity in USDC at the high edge of its price, less ${borrowed > 0n ? 'your debt and ' : ''}0.5% kept back in case interest or prices move before the borrow lands.`,
         after: { balance: acc.balance - atChain - a, holdings: acc.holdings },
         error,
         note:
@@ -536,6 +544,7 @@ function Actions({ model, acc }: { model: MarketModel; acc: AccountView }) {
               {plan.error}
             </span>
           ) : null}
+          {plan.maxHint ? <span className="hint">{plan.maxHint}</span> : null}
         </div>
 
         {plan.note ? <div className="callout">{plan.note}</div> : null}
