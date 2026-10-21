@@ -66,7 +66,8 @@ LOCAL_RPC=http://127.0.0.1:8545 npx vitest run scripts     # parity against a lo
 The parity suite checks every rounding the app mirrors against the contracts, to the wei: rates and indexes,
 oracle prices, storefront quotes, the debt and capacities the market reports in its own revert data, the
 principal each supply, withdraw, borrow and repay leaves, and absorb settlement with a surplus and with bad debt.
-It reverts the chain to a snapshot when it finishes, so it can run again.
+It reverts the chain to a snapshot when it finishes, so it can run again. CI runs it on every push, against a fresh
+local deployment.
 
 ## Deploy the contracts to Base Sepolia
 
