@@ -7,7 +7,10 @@
 
 A **single-market money market** in the style of Compound III (Comet): one borrowable base asset (USDC), isolated supply-only collateral (WETH, wBTC), index-based interest accrual, and protocol-absorbed liquidations. Built as a proof of concept of DeFi lending primitives, around provable solvency.
 
-> **Proof of concept. Not audited and not deployed.** All code is written from scratch; Compound III is the architectural reference, and no code is copied or forked. Do not use in production.
+> **Proof of concept. Not audited, and not deployed on any mainnet.** All code is written from scratch; Compound III is the architectural reference, and no code is copied or forked. Do not use in production.
+
+**Demo app:** a web interface in [`app/`](./app/README.md) runs the market on Base Sepolia with testnet tokens: supply, borrow, absorb and buy seized collateral, with previews computed by the contract's own math.
+<!-- Add the live link here once deployed on Vercel: **Live demo:** https://... -->
 
 ---
 
@@ -213,6 +216,8 @@ test/
   unit/  fuzz/  invariant/  integration/  fork/  mocks/
 script/
   Deploy.s.sol               Deployment script
+  testnet/                   Base Sepolia demo deployment: DemoPyth, faucet tokens, its own tests
+app/                         Demo web app (React, wagmi, viem), deployed on Vercel
 docs/                        Guides, roadmap and testing documentation
 ```
 
