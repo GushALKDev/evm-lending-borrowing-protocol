@@ -47,6 +47,9 @@ jobs:
       - name: Run tests
         run: forge test -vvv
 
+      - name: Run testnet tooling tests
+        run: FOUNDRY_PROFILE=testnet forge test -vvv
+
   lint:
     name: Solhint
     runs-on: ubuntu-latest
@@ -62,6 +65,31 @@ jobs:
 
       - name: Solhint
         run: npm run lint
+
+  app:
+    name: App
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
 
   coverage:
     name: Coverage
