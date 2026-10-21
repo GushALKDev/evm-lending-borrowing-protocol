@@ -63,6 +63,11 @@ npm test                                                   # unit tests of the m
 LOCAL_RPC=http://127.0.0.1:8545 npx vitest run scripts     # parity against a local deployment
 ```
 
+The parity suite checks every rounding the app mirrors against the contracts, to the wei: rates and indexes,
+oracle prices, storefront quotes, the debt and capacities the market reports in its own revert data, the
+principal each supply, withdraw, borrow and repay leaves, and absorb settlement with a surplus and with bad debt.
+It reverts the chain to a snapshot when it finishes, so it can run again.
+
 ## Deploy the contracts to Base Sepolia
 
 From the repository root, with a fresh key used only for this demo:
