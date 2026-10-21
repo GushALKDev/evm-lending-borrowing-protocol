@@ -5,7 +5,7 @@ import { useConnection } from 'wagmi'
 import { getBlockNumber, getPublicClient, readContracts } from 'wagmi/actions'
 import { freshPriceUpdate, useTx } from '../hooks/useTx'
 import { marketAbi, tokenAbi } from '../lib/abi'
-import { formatBps, formatFixed, formatPct, formatUsd, parseAmount, shortAddress, toInput } from '../lib/format'
+import { formatBps, formatFixed, formatPct, formatUsd, parseAmount, relativeTime, shortAddress, toInput } from '../lib/format'
 import { PAUSE, absorbPreview, mulDivUp, quoteCollateral, storefrontDiscount, FACTOR_SCALE } from '../lib/market'
 import { buildAccount, type AccountView, type MarketModel } from '../lib/model'
 import { wagmiConfig } from '../wagmi'
@@ -297,29 +297,35 @@ function Storefront({ model }: { model: MarketModel }) {
 /* ------------------------------------------------------------------ */
 
 const SCAN_WINDOW = 500_000n // about 11 days of Base blocks
+const BLOCK_SECONDS = 2n // Base produces a block every 2 seconds
+// The public Base Sepolia RPC serves eth_getLogs 200 blocks at a time: halving from 12,800 lands on it exactly.
+const FIRST_SPAN = 12_800n
+const MIN_SPAN = 200n
 const supplyCollateralEvent = parseAbiItem('event SupplyCollateral(address indexed from, address indexed asset, uint256 amount)')
 
-async function scanBorrowers(model: MarketModel): Promise<{ accounts: Address[]; fromBlock: bigint; partial: boolean }> {
+/** Accounts that posted collateral, newest blocks first, so a scan that runs out of requests drops the oldest. */
+async function scanBorrowers(model: MarketModel): Promise<{ accounts: Address[]; fromBlock: bigint; latest: bigint; partial: boolean }> {
   const client = getPublicClient(wagmiConfig)!
   const latest = await getBlockNumber(wagmiConfig)
   const start = latest - model.deployment.deployBlock > SCAN_WINDOW ? latest - SCAN_WINDOW : model.deployment.deployBlock
   const found = new Set<Address>()
-  let from = start
-  let span = 10_000n
+  let to = latest
+  let span = FIRST_SPAN
   let requests = 0
-  while (from <= latest && requests < 80) {
-    const to = from + span - 1n > latest ? latest : from + span - 1n
+  while (to >= start && requests < 80) {
+    const from = to - start + 1n > span ? to - span + 1n : start
     try {
       const logs = await client.getLogs({ address: model.deployment.market, event: supplyCollateralEvent, fromBlock: from, toBlock: to })
       logs.forEach((l) => l.args.from && found.add(l.args.from))
-      from = to + 1n
+      to = from - 1n
     } catch {
-      if (span <= 500n) break
+      if (span <= MIN_SPAN) break
       span /= 2n // the RPC rejected the range: retry with a smaller one
     }
     requests++
   }
-  return { accounts: [...found], fromBlock: start, partial: from <= latest }
+  if (to === latest) throw new Error('The RPC refused every log range.')
+  return { accounts: [...found], fromBlock: to + 1n, latest, partial: to >= start }
 }
 
 function Borrowers({ model, onPick }: { model: MarketModel; onPick: (a: string) => void }) {
@@ -356,7 +362,7 @@ function Borrowers({ model, onPick }: { model: MarketModel; onPick: (a: string) 
           The RPC refused the log scan. Check accounts one by one above.
         </p>
       ) : rows.length === 0 ? (
-        <p className="hint">No open borrows yet.</p>
+        <p className="hint">{scan.data?.partial ? 'No open borrows in the blocks scanned.' : 'No open borrows yet.'}</p>
       ) : (
         <div className="table-wrap">
           <table>
@@ -396,7 +402,10 @@ function Borrowers({ model, onPick }: { model: MarketModel; onPick: (a: string) 
       )}
       {scan.data?.partial ? (
         <p className="hint" style={{ marginTop: 10 }}>
-          Only part of the history could be scanned through this RPC; older borrowers may be missing.
+          This demo finds borrowers by reading the market's collateral deposits through a public RPC, which returns
+          200 blocks per request, so the list covers only the last{' '}
+          {relativeTime(Number((scan.data.latest - scan.data.fromBlock + 1n) * BLOCK_SECONDS))}. Older borrowers are
+          missing; a production frontend would read them from an indexer. Any account can still be checked above.
         </p>
       ) : null}
     </div>
