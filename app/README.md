@@ -6,7 +6,7 @@ collateral, borrow and repay, absorb underwater accounts and buy seized collater
 
 Proof of concept, not audited. The tokens are testnet stand-ins with no value.
 
-Live: https://evm-lending-borrowing-protocol.vercel.app
+Live: https://lending-poc.gushalk.workers.dev
 
 ## What it shows
 
@@ -111,16 +111,29 @@ The testnet tooling has its own tests, kept apart so the protocol's test figures
 FOUNDRY_PROFILE=testnet forge test
 ```
 
-## Deploy the app to Vercel
+## Deploy the app to Cloudflare Workers
 
-1. In Vercel, add a new project from this GitHub repository.
-2. Set **Root Directory** to `app`. Vercel detects Vite; `vercel.json` sets the build command, the output folder
-   and the rewrite that serves `index.html` for every page path (`/liquidations`, `/how-it-works`).
-3. Optional environment variable: `VITE_RPC_URL`, if the public Base Sepolia RPC rate limits the page. Any key in
-   it is visible to visitors, so restrict it to the site's domain at the provider.
-4. Deploy. Every push to `main` redeploys.
+The app runs as `lending-poc`, an assets-only Worker: there is no Worker script. `wrangler.jsonc` points it at
+`dist/` and holds the SPA fallback, which serves `index.html` for every page path (`/liquidations`,
+`/how-it-works`). `public/_headers` holds the cache and security headers; Vite copies it into `dist/`.
 
-The Hobby plan is enough: it is a static site with no server functions.
+First deploy, from a terminal in `app/`:
+
+```bash
+npx wrangler login           # authorizes wrangler on your Cloudflare account, in the browser
+npm run deploy               # builds, deploys and prints the workers.dev URL
+```
+
+Deploys on push: in the Cloudflare dashboard, connect this repository to the Worker (Workers Builds) with root
+directory `app`, build command `npm run build` and deploy command `npx wrangler deploy`. The Worker name in
+`wrangler.jsonc` must match the Worker in the dashboard, or the build fails.
+
+`VITE_RPC_URL` is optional, for when the public Base Sepolia RPC rate limits the page. Vite reads it at build time,
+so on Workers Builds it goes in the build variables (Settings, Build), not in the runtime variables. Any key in it
+is visible to visitors, so restrict it to the site's domain at the provider.
+
+The Workers Free plan is enough: the site is static, there is no Worker script, and requests to static assets are
+free.
 
 ## Structure
 

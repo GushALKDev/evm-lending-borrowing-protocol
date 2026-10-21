@@ -1,5 +1,5 @@
 // Regenerates src/abi/*.ts from the Foundry build output (run `forge build` at the repo root first).
-// The ABIs are committed, so the app builds on Vercel without Foundry.
+// The ABIs are committed, so the app builds without Foundry, on Workers Builds too.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
