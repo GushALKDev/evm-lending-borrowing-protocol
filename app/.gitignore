@@ -7,3 +7,5 @@ dist/
 src/config/deployments/31337.json
 test-results/
 *.tsbuildinfo
+# Wrangler local state
+.wrangler/
