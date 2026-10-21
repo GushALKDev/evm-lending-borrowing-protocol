@@ -1,0 +1,40 @@
+{
+  "USDC": {
+    "address": "0x0946300541210Bb7BaDD3b230dBa2Cb313392000",
+    "anchorHeartbeat": 90000,
+    "chainlinkFeed": "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165",
+    "pythFeedId": "0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"
+  },
+  "WBTC": {
+    "address": "0xeEa944f5152c1fe205fbC21921FA6A65B41b8627",
+    "anchorHeartbeat": 3600,
+    "borrowCollateralFactor": 7500,
+    "chainlinkFeed": "0x0FB99723Aee6f420beAD13e6bBB79b7E6F034298",
+    "decimals": 8,
+    "liquidateCollateralFactor": 8000,
+    "liquidationFactor": 9000,
+    "pythFeedId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+    "storeFrontPriceFactor": 5000,
+    "supplyCap": "50000000000"
+  },
+  "WETH": {
+    "address": "0xc64e01344C30fc123d24405a50097398609879e9",
+    "anchorHeartbeat": 3600,
+    "borrowCollateralFactor": 8000,
+    "chainlinkFeed": "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1",
+    "decimals": 18,
+    "liquidateCollateralFactor": 8500,
+    "liquidationFactor": 9300,
+    "pythFeedId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+    "storeFrontPriceFactor": 5000,
+    "supplyCap": "10000000000000000000000"
+  },
+  "chainId": 84532,
+  "demoConfBps": 5,
+  "deployBlock": 48413275,
+  "faucet": "0xB8C6cCDB7CFdBa62e3cd80785F1f7770983Ebc09",
+  "market": "0xE3461f49311Bd827Fa1891C2Ad2674F7A651a7AD",
+  "oracle": "0xe0CE4d9b4393Fd08b4453D0cEe2a133aC792D0C2",
+  "pyth": "0xd785bCe73e067d37544c5161d2453AC6E9505510",
+  "rateModel": "0x6192A26dAf9E72cf61eCa2919c3C527dAb560DA1"
+}
