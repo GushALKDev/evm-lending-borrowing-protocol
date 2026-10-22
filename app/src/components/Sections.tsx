@@ -55,8 +55,8 @@ export function Notice() {
   return (
     <div className="notice">
       <div className="wrap">
-        Testnet proof of concept with tokens that have no value. Not audited. Prices are Chainlink's, pushed through a Pyth
-        stand-in: <Link href="/how-it-works#oracle">how and why</Link>.
+        Testnet proof of concept for educational purposes, with tokens that have no value. Not audited. Prices are
+        Chainlink's, pushed through a Pyth stand-in: <Link href="/how-it-works#oracle">how and why</Link>.
       </div>
     </div>
   )
@@ -163,7 +163,7 @@ export function Footer({ model }: { model: MarketModel | null }) {
   return (
     <footer className="site-footer">
       <div className="wrap">
-        <p>Proof of concept, not audited. Testnet tokens have no value.</p>
+        <p>Proof of concept, not audited, for educational purposes. Testnet tokens have no value.</p>
         <nav className="footer-links" aria-label="Links">
           <a href={links.repo} target="_blank" rel="noreferrer">
             Source code

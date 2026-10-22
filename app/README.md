@@ -4,7 +4,7 @@ A web app for the money market in this repository, running on Base Sepolia with 
 read the whole market without a wallet, and with one they can supply and withdraw USDC, post WETH or wBTC as
 collateral, borrow and repay, absorb underwater accounts and buy seized collateral from the storefront.
 
-Proof of concept, not audited. The tokens are testnet stand-ins with no value.
+Proof of concept, not audited, for educational purposes. The tokens are testnet stand-ins with no value.
 
 Live: https://lending-poc.gushalk.workers.dev
 

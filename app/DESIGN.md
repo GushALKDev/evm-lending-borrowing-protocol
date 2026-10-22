@@ -42,7 +42,7 @@ from industrial control systems. Sentence case throughout, no all-caps labels.
 ```
 header        wordmark (links to the market page), network, pages, test tokens, wallet
               pages: Market, Liquidations, How it works, on a second header row below 1024 px
-notice        one line: testnet, not audited, where prices come from
+notice        one line: testnet, for educational purposes, not audited, where prices come from
 
 /             hero: headline + balance sheet + four rates
               grid: your position and actions (left, wider) | rates curve and collateral (right)
