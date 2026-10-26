@@ -11,9 +11,9 @@ A **single-market money market** in the style of Compound III (Comet): one borro
 
 **Demo app:** a web interface in [`app/`](./app/README.md) runs the market on Base Sepolia with testnet tokens: supply, borrow, absorb and buy seized collateral, with previews computed by the contract's own math.
 
-**Live demo:** https://lending-poc.gushalk.workers.dev
+**Live demo:** https://lending-poc.tesselium.com
 
-[![The demo app's market page, with the balance sheet read live from Base Sepolia](docs/images/demo-app.png)](https://lending-poc.gushalk.workers.dev)
+[![The demo app's market page, with the balance sheet read live from Base Sepolia](docs/images/demo-app.png)](https://lending-poc.tesselium.com)
 
 ---
 
