@@ -3,6 +3,7 @@ import { AccountCard } from './components/Account'
 import { FaucetDialog } from './components/FaucetDialog'
 import { Hero } from './components/Hero'
 import { Liquidations } from './components/Liquidations'
+import { LegalNotice } from './components/Legal'
 import { CollateralCard, RatesCard } from './components/MarketCards'
 import { Footer, Header, HowItWorks, Notice } from './components/Sections'
 import { Toasts } from './components/Toasts'
@@ -42,7 +43,9 @@ function Market() {
     <>
       <Header page={page} onConnect={openConnect} onFaucet={() => setFaucetOpen(true)} />
       <Notice />
-      {model ? (
+      {page === 'legal' ? (
+        <LegalNotice />
+      ) : model ? (
         <main>
           {page === 'market' ? (
             <>

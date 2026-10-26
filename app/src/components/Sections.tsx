@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 import { chain, explorerAddress, links } from '../config/chain'
-import { navigate, pages, type Page } from '../hooks/useRoute'
+import { LEGAL_PATH, navigate, pages, type Page } from '../hooks/useRoute'
 import { formatBps } from '../lib/format'
 import type { MarketModel } from '../lib/model'
 import { Mark } from './icons'
@@ -179,6 +179,7 @@ export function Footer({ model }: { model: MarketModel | null }) {
           <a href={links.author} target="_blank" rel="noreferrer">
             Built by Gustavo Martín
           </a>
+          <Link href={LEGAL_PATH}>Legal notice</Link>
         </nav>
       </div>
     </footer>

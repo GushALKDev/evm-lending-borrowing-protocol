@@ -48,6 +48,7 @@ notice        one line: testnet, for educational purposes, not audited, where pr
               grid: your position and actions (left, wider) | rates curve and collateral (right)
 /liquidations balance sheet, then check an account, storefront, accounts with debt
 /how-it-works four mechanics + the oracle note
+/legal        legal notice: owner (LSSI-CE), purpose, liability, data and cookies; linked from the footer only
 
 footer
 ```
