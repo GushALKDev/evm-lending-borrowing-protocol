@@ -173,7 +173,7 @@ export function Footer({ model }: { model: MarketModel | null }) {
           </a>
           {model ? (
             <a href={explorerAddress(model.deployment.market)} target="_blank" rel="noreferrer">
-              Market contract
+              Contract
             </a>
           ) : null}
           <span>
@@ -186,7 +186,7 @@ export function Footer({ model }: { model: MarketModel | null }) {
               Tesselium Labs
             </a>
           </span>
-          <Link href={LEGAL_PATH}>Legal notice</Link>
+          <Link href={LEGAL_PATH}>Legal</Link>
         </nav>
       </div>
     </footer>
