@@ -23,6 +23,7 @@ export const links = {
   repo: 'https://github.com/GushALKDev/evm-lending-borrowing-protocol',
   docs: 'https://github.com/GushALKDev/evm-lending-borrowing-protocol/blob/main/docs/README.md',
   author: 'https://www.linkedin.com/in/gustavomaral/',
+  tesselium: 'https://tesselium.com',
   ethFaucet: 'https://docs.base.org/base-chain/network-information/network-faucets',
   pythUpgrade: 'https://docs.pyth.network/price-feeds/core/upgrade/preparing',
 }
